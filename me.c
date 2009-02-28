@@ -1,8 +1,22 @@
-/* mein editor */
+/*
+------------------------------------------------------------------------------
+ mein editor, a minimalistic ncurses-based text editor.
+------------------------------------------------------------------------------
+"THE BEER-WARE LICENSE" (Revision 42):
+Andreas Krennmair <ak@synflood.at> wrote this program.  As long as you retain
+this notice you can do whatever you want with this stuff. If we meet some day, 
+and you think this stuff is worth it, you can buy me a beer in return.
+  -- Andreas Krennmair <ak@synflood.at>
+------------------------------------------------------------------------------
+*/
+
 #include <ncurses.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+
+#define PROGRAM_NAME "mein editor"
+#define PROGRAM_VERSION "0.1"
 
 #define clrline(i) do { move(i, 0); clrtoeol(); } while(0)
 
@@ -49,7 +63,7 @@ static void redraw_screen() {
 	attrset(A_REVERSE);
 	clrline(height-2);
 	move(y, x);
-	mvprintw(height-2, 0, "[mein editor] %s [%u|%u]", fname ? fname : "<no file>", offset + y + 1, x + 1);
+	mvprintw(height-2, 0, "[" PROGRAM_NAME " " PROGRAM_VERSION "] %s [%u|%u]", fname ? fname : "<no file>", offset + y + 1, x + 1);
 	attrset(A_NORMAL);
 }
 
@@ -203,11 +217,27 @@ static void save_to_file(void) {
 	mvprintw(height-1, 0, "Wrote '%s' (%u bytes).", fname, size);
 }
 
+static void version(void) {
+	printf("%s %s\n", PROGRAM_NAME, PROGRAM_VERSION);
+	exit(EXIT_SUCCESS);
+}
+
+static void usage(const char * argv0) {
+	printf("%s: usage: %s [--help|--version|<filename>]\n", argv0, argv0);
+	exit(EXIT_SUCCESS);
+}
+
 int main(int argc, char * argv[]) {
 	int quit_loop = 0;
 	char * kn; int key;
 
 	if (argc > 1) {
+		if (strcmp(argv[1], "-v")==0 || strcmp(argv[1], "--version")==0) {
+			version();
+		}
+		if (strcmp(argv[1], "-h")==0 || strcmp(argv[1], "--help")==0) {
+			usage(argv[0]);
+		}
 		load_file(argv[1]);
 	} else {
 		cur = create_line("", 0);
