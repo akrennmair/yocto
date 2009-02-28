@@ -1,6 +1,6 @@
 CC=gcc
 LIBS=-lncurses
-CFLAGS=-O2 -Wall -Wextra -ggdb
+CFLAGS=-O2 -Wall -Wextra -std=c99
 LDFLAGS=
 OBJS=$(patsubst %.c,%.o,$(wildcard *.c))
 TARGET=me
