@@ -31,12 +31,16 @@ static line_t * create_line(const char * text, unsigned int textlen) {
 	return l;
 }
 
-static inline void incr_y() {
+static inline void clear_lastline(void) {
+	move(height-1, 0); clrtoeol(); move(y, x);
+}
+
+static inline void incr_y(void) {
 	if (y < height-3) y++;
 	else offset++;
 }
 
-static inline void decr_y() {
+static inline void decr_y(void) {
 	if (y > 0) y--;
 	else offset--;
 }
@@ -136,10 +140,10 @@ static void handle_backspace() {
 }
 
 static void load_file(char * filename) {
-	FILE * f = fopen(filename, "r");
+	FILE * f;
 	line_t * nl;
 	char buf[1024];
-	if (!f) {
+	if ((f=fopen(filename, "r"))==NULL) {
 		fprintf(stderr, "Error: couldn't open '%s'.\n", filename);
 		exit(EXIT_FAILURE);
 	}
@@ -163,8 +167,40 @@ static void load_file(char * filename) {
 			}
 		}
 	}
+	fclose(f);
 	cur = find_first(cur);
 	fname = strdup(filename);
+}
+
+static void save_to_file(void) {
+	FILE * f;
+	line_t * l;
+	size_t size = 0;
+	if (fname == NULL) {
+		char buf[256];
+#define SAVE_PROMPT "Save to file:"
+		mvprintw(height-1, 0, SAVE_PROMPT);
+		echo();
+		mvgetnstr(height-1, sizeof(SAVE_PROMPT), buf, sizeof(buf));
+		noecho();
+		clear_lastline();
+		if (strlen(buf)>0) {
+			fname = strdup(buf);
+		} else {
+			mvprintw(height-1, 0, "Aborted saving.");
+			return;
+		}
+	}
+	if ((f=fopen(fname, "w"))==NULL) {
+		mvprintw(height-1, 0, "Error: couldn't open '%s' for writing.", fname);
+	}
+	for (l = find_first(cur);l!=NULL;l=l->next) {
+		fwrite(l->text, l->usize, 1, f);
+		size += l->usize + 1;
+		fputs("\n", f);
+	}
+	fclose(f);
+	mvprintw(height-1, 0, "Wrote '%s' (%u bytes).", fname, size);
 }
 
 int main(int argc, char * argv[]) {
@@ -188,14 +224,16 @@ int main(int argc, char * argv[]) {
 	while (!quit_loop) {
 		redraw_screen();
 		draw_text();
-
 		key = getch();
+		clear_lastline();
 		if (ERR == key) continue;
 		kn = keyname(key);
 		if (strcmp(kn, "^A")==0) {
 			x = 0;
 		} else if (strcmp(kn, "^E")==0) {
 			x = cur->usize;
+		} else if (strcmp(kn, "^W")==0) {
+			save_to_file();
 		} else if (strcmp(kn, "^K")==0) {
 			if (x == cur->usize) {
 				merge_next_line();
