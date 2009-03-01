@@ -91,15 +91,21 @@ static void draw_text() {
 	}
 	tmp = cur;
 	for (i=y;i<(int)height-2 && tmp!=NULL;i++) {
+		int attr = A_NORMAL;
 		clrline(i);
+		if (i==(int)y) attr = A_UNDERLINE;
+		attrset(attr);
 		if (tmp->usize > width) {
 			mvaddnstr(i, 0, tmp->text, width);
-			attrset(A_BOLD);
+			attrset(attr | A_BOLD);
 			mvaddstr(i, width-1, "$");
-			attrset(A_NORMAL);
+			attrset(attr);
 		} else {
+			unsigned int j;
 			mvaddnstr(i, 0, tmp->text, tmp->usize);
+			for (j=tmp->usize;j<width;j++) mvaddch(i, j, ' ');
 		}
+		attrset(A_NORMAL);
 		tmp = tmp->next;
 	}
 	attrset(A_BOLD);
