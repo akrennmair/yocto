@@ -290,7 +290,7 @@ static void load_file(char * filename) {
 		}
 	}
 	fclose(f);
-	cur = find_first(cur);
+	if (cur) cur = find_first(cur);
 	fname = strdup(filename);
 }
 
@@ -367,7 +367,9 @@ int main(int argc, char * argv[]) {
 			usage(argv[0]);
 		}
 		load_file(argv[1]);
+		if (cur == NULL) goto init_empty_buf;
 	} else {
+init_empty_buf:
 		cur = create_line("", 0);
 		cur->prev = NULL;
 		cur->next = NULL;
