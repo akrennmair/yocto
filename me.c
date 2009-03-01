@@ -134,6 +134,7 @@ static void redraw_screen() {
 	attrset(A_REVERSE);
 	clrline(height-2);
 	move(y, x);
+	mvprintw(height-2, 0, "%*s", width, "");
 	mvprintw(height-2, 0, "[" PROGRAM_NAME " " PROGRAM_VERSION "] %s %s [%u|%u-%u]", 
 		file_modified ? "*" : "-", fname ? fname : "<no file>", offset + y + 1, lx + 1, x + 1);
 	attrset(A_NORMAL);
@@ -268,9 +269,11 @@ static void load_file(char * filename) {
 	FILE * f;
 	line_t * nl;
 	wchar_t buf[1024];
-	if ((f=fopen(filename, "r"))==NULL) {
-		fwprintf(stderr, L"Error: couldn't open '%s'.\n", filename);
-		exit(EXIT_FAILURE);
+	fname = strdup(filename);
+	if ((f=fopen(fname, "r"))==NULL) {
+		mvprintw(height-1, 0, "New file: %s", fname);
+		cur = NULL;
+		return;
 	}
 	fwide(f, 1);
 	cur = NULL;
@@ -295,7 +298,6 @@ static void load_file(char * filename) {
 	}
 	fclose(f);
 	if (cur) cur = find_first(cur);
-	fname = strdup(filename);
 }
 
 static wchar_t query(const wchar_t * question, const wchar_t * answers) {
@@ -379,6 +381,14 @@ int main(int argc, char * argv[]) {
 		if (strcmp(argv[1], "-h")==0 || strcmp(argv[1], "--help")==0) {
 			usage(argv[0]);
 		}
+	}
+
+
+	initscr(); raw(); noecho(); nonl(); keypad(stdscr, TRUE);
+	lx = offset = y = x = 0;
+	getmaxyx(stdscr, height, width);
+
+	if (argc > 1) {
 		load_file(argv[1]);
 		if (cur == NULL) goto init_empty_buf;
 	} else {
@@ -388,11 +398,7 @@ init_empty_buf:
 		cur->next = NULL;
 	}
 
-	initscr(); raw(); noecho(); nonl(); keypad(stdscr, TRUE);
-	lx = offset = y = x = 0;
-
 	while (!quit_loop) {
-		getmaxyx(stdscr, height, width);
 		redraw_screen();
 		draw_text();
 		rc  = wget_wch(stdscr, &key);
