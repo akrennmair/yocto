@@ -74,17 +74,17 @@ static void correct_x(void) {
 	}
 }
 
-static size_t print_line(unsigned int y, const wchar_t * text, size_t len) {
+static size_t print_line(unsigned int ycoord, const wchar_t * text, size_t len) {
 	size_t col = 0;
 	unsigned int i = 0;
 	for (i=0;i<len && col<width;i++) {
 		if (text[i] == '\t') {
 			unsigned int j;
 			for (j=0;j<TABWIDTH;j++)
-				mvaddwstr(y, col+j, L" ");
+				mvaddwstr(ycoord, col+j, L" ");
 			col += TABWIDTH;
 		} else {
-			mvaddnwstr(y, col, text + i, 1);
+			mvaddnwstr(ycoord, col, text + i, 1);
 			col += wcwidth(text[i]);
 		}
 	}
@@ -189,14 +189,14 @@ static void insert_char(wint_t key) {
 }
 
 static void handle_enter() {
-	line_t * nl;
-	nl = create_line(cur->text + x, cur->usize - lx);
+	line_t * l;
+	l = create_line(cur->text + x, cur->usize - lx);
 	cur->usize = x;
 	if (cur->next)
-		cur->next->prev = nl;
-	nl->next = cur->next;
-	nl->prev = cur;
-	cur->next = nl;
+		cur->next->prev = l;
+	l->next = cur->next;
+	l->prev = cur;
+	cur->next = l;
 	cur = cur->next;
 	incr_y();
 	lx = x = 0;
@@ -261,7 +261,7 @@ static void goto_prevpage(void) {
 
 static void load_file(char * filename) {
 	FILE * f;
-	line_t * nl;
+	line_t * l;
 	wchar_t buf[1024];
 	fname = strdup(filename);
 	if ((f=fopen(fname, "r"))==NULL) {
@@ -278,15 +278,15 @@ static void load_file(char * filename) {
 			if (len>0 && buf[len-1] == L'\n') {
 				buf[len-1] = L'\0'; len--;
 			}
-			nl = create_line(buf, len);
+			l = create_line(buf, len);
 			if (cur) {
-				nl->next = cur->next;
-				nl->prev = cur;
-				cur->next = nl;
+				l->next = cur->next;
+				l->prev = cur;
+				cur->next = l;
 				cur = cur->next;
 			} else {
-				nl->prev = nl->next = NULL;
-				cur = nl;
+				l->prev = l->next = NULL;
+				cur = l;
 			}
 		}
 	}
@@ -313,8 +313,8 @@ static void save_to_file(int warn_if_exists) {
 	size_t size = 0;
 	if (fname == NULL) {
 		char buf[256];
-read_filename:
 #define SAVE_PROMPT "Save to file:"
+read_filename:
 		mvprintw(height-1, 0, SAVE_PROMPT);
 		echo();
 		mvgetnstr(height-1, sizeof(SAVE_PROMPT), buf, sizeof(buf));
