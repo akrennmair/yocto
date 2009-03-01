@@ -11,6 +11,26 @@ To build and install me, simply run "make" and "make install".
 Build dependencies:
 - ncurses (tested with 5.4)
 
+Keys
+----
+
+Here's a list of available keys:
+Down          go to next line
+Up            go to previous line
+PageDown      go to next page
+PageUp        go to previous page
+Backspace     delete character left of the cursor
+DEL           delete character right of the cursor
+Return        insert new line
+Ctrl-A        go to begin of line
+Ctrl-D        delete character right of the cursor
+Ctrl-E        go to end of line
+Ctrl-C        cancel editor
+Ctrl-S        save file
+Ctrl-W        save file as
+Ctrl-X        quit editor
+
+
 Contact
 -------
 For feedback, don't hesitate to contact Andreas Krennmair <ak@synflood.at>.
