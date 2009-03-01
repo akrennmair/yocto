@@ -266,6 +266,7 @@ read_filename:
 	}
 	if ((f=fopen(fname, "w"))==NULL) {
 		mvprintw(height-1, 0, "Error: couldn't open '%s' for writing.", fname);
+		return;
 	}
 	for (l = find_first(cur);l!=NULL;l=l->next) {
 		fwrite(l->text, l->usize, 1, f);
