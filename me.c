@@ -14,6 +14,8 @@ and you think this stuff is worth it, you can buy me a beer in return.
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #define PROGRAM_NAME "mein editor"
 #define PROGRAM_VERSION "0.1"
@@ -29,6 +31,7 @@ typedef struct line {
 static line_t * cur = NULL;
 static unsigned int width, height, x, y, offset;
 static char * fname = NULL;
+static int file_modified = 0;
 
 static line_t * find_first(line_t * l) {
 	while (l->prev != NULL)
@@ -63,7 +66,8 @@ static void redraw_screen() {
 	attrset(A_REVERSE);
 	clrline(height-2);
 	move(y, x);
-	mvprintw(height-2, 0, "[" PROGRAM_NAME " " PROGRAM_VERSION "] %s [%u|%u]", fname ? fname : "<no file>", offset + y + 1, x + 1);
+	mvprintw(height-2, 0, "[" PROGRAM_NAME " " PROGRAM_VERSION "] %s %s [%u|%u]", 
+		file_modified ? "*" : "-", fname ? fname : "<no file>", offset + y + 1, x + 1);
 	attrset(A_NORMAL);
 }
 
@@ -78,13 +82,13 @@ static void draw_text() {
 		}
 	}
 	tmp = cur;
-	for (i=y;i<height-2 && tmp!=NULL;i++) {
+	for (i=y;i<(int)height-2 && tmp!=NULL;i++) {
 		clrline(i);
 		mvaddnstr(i, 0, tmp->text, tmp->usize > width ? width : tmp->usize);
 		tmp = tmp->next;
 	}
 	attrset(A_BOLD);
-	for (;i<height-2;i++) {
+	for (;i<(int)height-2;i++) {
 		clrline(i);
 		mvaddstr(i, 0, "~");
 	}
@@ -186,12 +190,25 @@ static void load_file(char * filename) {
 	fname = strdup(filename);
 }
 
-static void save_to_file(void) {
+static char query(const char * question, const char * answers) {
+	int a;
+	clear_lastline();
+	mvprintw(height-1, 0, "%s", question);
+	move(height-1, strlen(question)+1);
+	do {
+		a = getch();
+	} while (strchr(answers, a)==NULL);
+	clear_lastline();
+	return a;
+}
+
+static void save_to_file(int warn_if_exists) {
 	FILE * f;
 	line_t * l;
 	size_t size = 0;
 	if (fname == NULL) {
 		char buf[256];
+read_filename:
 #define SAVE_PROMPT "Save to file:"
 		mvprintw(height-1, 0, SAVE_PROMPT);
 		echo();
@@ -199,6 +216,11 @@ static void save_to_file(void) {
 		noecho();
 		clear_lastline();
 		if (strlen(buf)>0) {
+			if (warn_if_exists) {
+				struct stat st;
+				if (stat(buf, &st)==0 && query("File exists. Overwrite (y/n)?", "yn")=='n')
+						goto read_filename;
+			}
 			fname = strdup(buf);
 		} else {
 			mvprintw(height-1, 0, "Aborted saving.");
@@ -215,6 +237,7 @@ static void save_to_file(void) {
 	}
 	fclose(f);
 	mvprintw(height-1, 0, "Wrote '%s' (%u bytes).", fname, size);
+	file_modified = 0;
 }
 
 static void version(void) {
@@ -245,7 +268,7 @@ int main(int argc, char * argv[]) {
 		cur->next = NULL;
 	}
 
-	initscr(); cbreak(); noecho();
+	initscr(); raw(); noecho();
 	nonl(); intrflush(stdscr, FALSE); keypad(stdscr, TRUE);
 	offset = y = x = 0;
 
@@ -258,26 +281,47 @@ int main(int argc, char * argv[]) {
 		clear_lastline();
 		if (ERR == key) continue;
 		kn = keyname(key);
+		/* fprintf(stderr, "key = %d keyname = %s\n", key, kn); */
 		if (strcmp(kn, "^A")==0) {
 			x = 0;
 		} else if (strcmp(kn, "^E")==0) {
 			x = cur->usize;
+		} else if (strcmp(kn, "^S")==0) {
+			save_to_file(0);
 		} else if (strcmp(kn, "^W")==0) {
-			save_to_file();
+			char * oldfname = fname;
+			fname = NULL;
+			save_to_file(1);
+			if (NULL == fname) 
+				fname = oldfname;
+			else
+				free(oldfname);
 		} else if (strcmp(kn, "^K")==0) {
 			if (x == cur->usize) {
 				merge_next_line();
 			} else {
 				cur->usize = x;
 			}
-		} if (strcmp(kn, "^X")==0) {
+			file_modified = 1;
+		} else if (strcmp(kn, "^X")==0) {
+			if (file_modified) {
+				char a = query("Save file (y/n/c)?", "ync");
+				switch (a) {
+				case 'y': save_to_file(fname==NULL); /* fall-through */
+				case 'n': quit_loop = 1; break;
+				case 'c': break;
+				}
+			} else quit_loop = 1;
+		} else if (strcmp(kn, "^C")==0) {
 			quit_loop = 1;
 		} else if (strcmp(kn, "^M")==0) {
 			handle_enter();
+			file_modified = 1;
 		} else {
 			switch (key) {
 			case KEY_BACKSPACE:
 				handle_backspace();
+				file_modified = 1;
 				break;
 			case KEY_UP:
 				if (cur->prev) {
@@ -302,6 +346,7 @@ int main(int argc, char * argv[]) {
 			default:
 				if (key >= 32) {
 					insert_char(key);
+					file_modified = 1;
 					x++;
 				}
 				break;
