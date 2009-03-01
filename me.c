@@ -218,6 +218,53 @@ static void merge_next_line(void) {
 	}
 }
 
+static void center_curline(void) {
+	unsigned int middle = (height-3)/2;
+	while (y > middle) {
+		decr_y(); offset++;
+	}
+	while (y < middle && offset > 0) {
+		incr_y(); offset--;
+	}
+}
+
+static void handle_goto(void) {
+	char buf[16];
+	char * ptr;
+	unsigned int pos;
+#define GOTO_PROMPT "Go to line:"
+	mvprintw(height-1, 0, GOTO_PROMPT);
+	echo();
+	mvgetnstr(height-1, sizeof(GOTO_PROMPT), buf, sizeof(buf));
+	noecho();
+	clear_lastline();
+	pos = strtoul(buf, &ptr, 10);
+	if (ptr > buf) {
+		unsigned int curpos = y + offset;
+		line_t * l = cur;
+		int tmp = 0;
+		if (pos < 1) {
+			mvaddwstr(height-1, 0, L"Line number too small."); return;
+		}
+		pos--;
+		if (curpos < pos) {
+			while (curpos < pos && l) {
+				l = l->next; curpos++; tmp++;
+			}
+		} else if (curpos > pos) {
+			while (curpos > pos && l) {
+				l = l->prev; curpos--; tmp--;
+			}
+		}
+		if (l) {
+			while (tmp > 0) { incr_y(); tmp--; }
+			while (tmp < 0) { decr_y(); tmp++; }
+			cur = l;
+			center_curline();
+		} else mvaddwstr(height-1, 0, L"Line number too large.");
+	}
+}
+
 static void handle_del(void) {
 	if (lx < cur->usize) {
 		wmemmove(cur->text + lx, cur->text + lx + 1, cur->usize - lx - 1);
@@ -447,13 +494,9 @@ init_empty_buf:
 					decr_y(); offset++;
 				}
 			} else if (strcmp(kn, "^Z")==0) {
-				unsigned int middle = (height-3)/2;
-				while (y > middle) {
-					decr_y(); offset++;
-				}
-				while (y < middle && offset > 0) {
-					incr_y(); offset--;
-				}
+				center_curline();
+			} else if (strcmp(kn, "^G")==0) {
+				handle_goto();
 			}
 		}
 		switch (key) {

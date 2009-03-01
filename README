@@ -27,6 +27,7 @@ Ctrl-B        move current line to bottom of screen
 Ctrl-C        cancel editor
 Ctrl-D        delete character right of the cursor
 Ctrl-E        go to end of line
+Ctrl-G        go to line
 Ctrl-S        save file
 Ctrl-T        move current line to top of screen
 Ctrl-W        save file as
