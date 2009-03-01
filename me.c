@@ -132,8 +132,6 @@ static inline void decr_x(void) {
 
 static void redraw_screen() {
 	attrset(A_REVERSE);
-	clrline(height-2);
-	move(y, x);
 	mvprintw(height-2, 0, "%*s", width, "");
 	mvprintw(height-2, 0, "[" PROGRAM_NAME " " PROGRAM_VERSION "] %s %s [%u|%u-%u]", 
 		file_modified ? "*" : "-", fname ? fname : "<no file>", offset + y + 1, lx + 1, x + 1);
@@ -144,14 +142,13 @@ static void draw_text() {
 	int i;
 	line_t * tmp = cur->prev;
 	if (y > 0) {
-		for (i=y-1;i>=0 && tmp!=NULL;i--) {
+		for (i=y-1;i>=0 && tmp!=NULL;i--,tmp=tmp->prev) {
 			clrline(i);
 			print_line(i, tmp->text, tmp->usize);
-			tmp = tmp->prev;
 		}
 	}
 	tmp = cur;
-	for (i=y;i<(int)height-2 && tmp!=NULL;i++) {
+	for (i=y;i<(int)height-2 && tmp!=NULL;i++,tmp=tmp->next) {
 		int attr = A_NORMAL;
 		clrline(i);
 		if (i==(int)y) attr = A_UNDERLINE;
@@ -162,17 +159,14 @@ static void draw_text() {
 			mvaddwstr(i, width-1, L"$");
 			attrset(attr);
 		} else {
-			unsigned int j;
 			size_t col = print_line(i, tmp->text, tmp->usize);
-			for (j=col;j<width;j++) mvaddwstr(i, j, L" ");
+			mvprintw(i,col,"%*s", width-col, "");
 		}
 		attrset(A_NORMAL);
-		tmp = tmp->next;
 	}
 	attrset(A_BOLD);
 	for (;i<(int)height-2;i++) {
-		clrline(i);
-		mvaddwstr(i, 0, L"~");
+		clrline(i); mvaddwstr(i, 0, L"~");
 	}
 	attrset(A_NORMAL);
 	move(y, x);
@@ -191,6 +185,7 @@ static void insert_char(wint_t key) {
 	resize_line(cur, cur->usize + 1);
 	wmemmove(cur->text + lx + 1, cur->text + lx, cur->usize - lx);
 	cur->text[lx] = (wchar_t)key;
+	file_modified = 1;
 }
 
 static void handle_enter() {
@@ -205,6 +200,7 @@ static void handle_enter() {
 	cur = cur->next;
 	incr_y();
 	lx = x = 0;
+	file_modified = 1;
 }
 
 static void merge_next_line(void) {
@@ -229,6 +225,7 @@ static void handle_del(void) {
 	} else {
 		merge_next_line();
 	}
+	file_modified = 1;
 }
 
 static void handle_backspace(void) {
@@ -236,34 +233,29 @@ static void handle_backspace(void) {
 		decr_x();
 		wmemmove(cur->text + lx, cur->text + lx + 1, cur->usize - lx - 1);
 		cur->usize--;
-	} else {
-		if (cur->prev) {
-			size_t oldsize;
-			cur = cur->prev;
-			oldsize = cur->usize;
-			merge_next_line();
-			decr_y();
-			lx = oldsize;
-			x = compute_width(cur->text, lx);
-		}
+	} else if (cur->prev) {
+		size_t oldsize;
+		cur = cur->prev;
+		oldsize = cur->usize;
+		merge_next_line();
+		decr_y();
+		lx = oldsize;
+		x = compute_width(cur->text, lx);
 	}
+	file_modified = 1;
 }
 
 static void goto_nextpage(void) {
 	unsigned int i;
-	for (i=0;i<height-3 && cur->next!=NULL;i++) {
-		cur = cur->next;
+	for (i=0;i<height-3 && cur->next!=NULL;i++,cur=cur->next)
 		incr_y();
-	}
 	correct_x();
 }
 
 static void goto_prevpage(void) {
 	unsigned int i;
-	for (i=0;i<height-3 && cur->prev!=NULL;i++) {
-		cur = cur->prev;
+	for (i=0;i<height-3 && cur->prev!=NULL;i++,cur=cur->prev)
 		decr_y();
-	}
 	correct_x();
 }
 
@@ -444,20 +436,16 @@ init_empty_buf:
 				quit_loop = 1;
 			} else if (strcmp(kn, "^M")==0) {
 				handle_enter();
-				file_modified = 1;
 			} else if (strcmp(kn, "^D")==0) {
 				handle_del();
-				file_modified = 1;
 			}
 		}
 		switch (key) {
 		case KEY_BACKSPACE:
 			handle_backspace();
-			file_modified = 1;
 			break;
 		case KEY_DC:
 			handle_del();
-			file_modified = 1;
 			break;
 		case KEY_UP:
 			if (cur->prev) {
@@ -493,7 +481,6 @@ init_empty_buf:
 		default:
 			if (key >= L' ' && rc != KEY_CODE_YES) {
 				insert_char(key);
-				file_modified = 1;
 				incr_x();
 			}
 			break;
