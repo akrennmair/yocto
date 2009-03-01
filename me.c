@@ -10,10 +10,12 @@ and you think this stuff is worth it, you can buy me a beer in return.
 ------------------------------------------------------------------------------
 */
 
+#define _XOPEN_SOURCE_EXTENDED
 #include <ncurses.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <wchar.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -25,7 +27,7 @@ and you think this stuff is worth it, you can buy me a beer in return.
 
 typedef struct line {
 	struct line * prev, * next; /* previous line, next line */
-	char * text;
+	wchar_t * text;
 	unsigned int asize, usize; /* allocated size, used size */
 } line_t;
 
@@ -40,12 +42,12 @@ static line_t * find_first(line_t * l) {
 	return l;
 }
 
-static size_t compute_width(const char * text, size_t len) {
+static size_t compute_width(const wchar_t * text, size_t len) {
 	size_t rv = 0;
 	unsigned int i;
 	for (i=0;i<len;i++) {
-		if (text[i] == '\t') rv += TABWIDTH;
-		else rv++;
+		if (text[i] == L'\t') rv += TABWIDTH;
+		else rv += wcwidth(text[i]);
 	}
 	return rv;
 }
@@ -55,7 +57,7 @@ static void align_x() {
 	unsigned int newx = 0;
 	for (i=0;i<cur->usize;i++) {
 		if (cur->text[i] == '\t') newx += TABWIDTH;
-		else newx++;
+		else newx += wcwidth(cur->text[i]);
 		if (newx > x) break;
 	}
 	lx = i;
@@ -71,28 +73,28 @@ static void correct_x(void) {
 	}
 }
 
-static size_t print_line(unsigned int y, const char * text, size_t len) {
+static size_t print_line(unsigned int y, const wchar_t * text, size_t len) {
 	size_t col = 0;
 	unsigned int i = 0;
 	for (i=0;i<len && col<width;i++) {
 		if (text[i] == '\t') {
 			unsigned int j;
 			for (j=0;j<TABWIDTH;j++)
-				mvaddch(y, col+j, ' ');
+				mvaddwstr(y, col+j, L" ");
 			col += TABWIDTH;
 		} else {
-			mvaddch(y, col, text[i]);
-			col++;
+			mvaddnwstr(y, col, text + i, 1);
+			col += wcwidth(text[i]);
 		}
 	}
 	return col;
 }
 
-static line_t * create_line(const char * text, unsigned int textlen) {
+static line_t * create_line(const wchar_t * text, unsigned int textlen) {
 	line_t * l = malloc(sizeof(line_t));
 	unsigned int len = text ? textlen : 0;
-	l->text = malloc(len);
-	if (text) memcpy(l->text, text,len);
+	l->text = malloc(len * sizeof(wchar_t));
+	if (text) wmemcpy(l->text, text, len);
 	l->usize = l->asize = len;
 	return l;
 }
@@ -113,8 +115,8 @@ static inline void decr_y(void) {
 
 static inline void incr_x(void) {
 	if (lx < cur->usize && x < width-1) {
-		if (cur->text[lx] == '\t') x+=TABWIDTH;
-		else x++;
+		if (cur->text[lx] == L'\t') x += TABWIDTH;
+		else x += wcwidth(cur->text[lx]);
 		lx++;
 	}
 }
@@ -122,8 +124,8 @@ static inline void incr_x(void) {
 static inline void decr_x(void) {
 	if (lx > 0) {
 		lx--;
-		if (cur->text[lx] == '\t') x-=TABWIDTH;
-		else x--; 
+		if (cur->text[lx] == L'\t') x -= TABWIDTH;
+		else x -= wcwidth(cur->text[lx]);
 	}
 }
 
@@ -155,12 +157,12 @@ static void draw_text() {
 		if (compute_width(tmp->text, tmp->usize) > width) {
 			print_line(i, tmp->text, tmp->usize);
 			attrset(attr | A_BOLD);
-			mvaddstr(i, width-1, "$");
+			mvaddwstr(i, width-1, L"$");
 			attrset(attr);
 		} else {
 			unsigned int j;
 			size_t col = print_line(i, tmp->text, tmp->usize);
-			for (j=col;j<width;j++) mvaddch(i, j, ' ');
+			for (j=col;j<width;j++) mvaddwstr(i, j, L" ");
 		}
 		attrset(A_NORMAL);
 		tmp = tmp->next;
@@ -168,7 +170,7 @@ static void draw_text() {
 	attrset(A_BOLD);
 	for (;i<(int)height-2;i++) {
 		clrline(i);
-		mvaddstr(i, 0, "~");
+		mvaddwstr(i, 0, L"~");
 	}
 	attrset(A_NORMAL);
 	move(y, x);
@@ -177,21 +179,21 @@ static void draw_text() {
 
 static void resize_line(line_t * l, size_t size) {
 	if (l->asize < size) {
-		l->text = realloc(l->text, size);
+		l->text = realloc(l->text, size * sizeof(wchar_t));
 		l->asize = size;
 	}
 	l->usize = size;
 }
 
-static void insert_char(int key) {
+static void insert_char(wint_t key) {
 	resize_line(cur, cur->usize + 1);
-	memmove(cur->text + lx + 1, cur->text + lx, cur->usize - lx);
-	cur->text[lx] = (char)key;
+	wmemmove(cur->text + lx + 1, cur->text + lx, cur->usize - lx);
+	cur->text[lx] = (wchar_t)key;
 }
 
 static void handle_enter() {
 	line_t * nl;
-	nl = create_line(cur->text + x, cur->usize - x);
+	nl = create_line(cur->text + x, cur->usize - lx);
 	cur->usize = x;
 	if (cur->next)
 		cur->next->prev = nl;
@@ -208,7 +210,7 @@ static void merge_next_line(void) {
 		line_t * n = cur->next;
 		size_t oldsize = cur->usize;
 		resize_line(cur, cur->usize + n->usize);
-		memmove(cur->text + oldsize, n->text, n->usize);
+		wmemmove(cur->text + oldsize, n->text, n->usize);
 		if (n->next) {
 			n->next->prev = cur;
 		}
@@ -220,7 +222,7 @@ static void merge_next_line(void) {
 
 static void handle_del(void) {
 	if (lx < cur->usize) {
-		memmove(cur->text + lx, cur->text + lx + 1, cur->usize - lx - 1);
+		wmemmove(cur->text + lx, cur->text + lx + 1, cur->usize - lx - 1);
 		cur->usize--;
 	} else {
 		merge_next_line();
@@ -230,7 +232,7 @@ static void handle_del(void) {
 static void handle_backspace(void) {
 	if (x > 0) {
 		decr_x();
-		memmove(cur->text + lx, cur->text + lx + 1, cur->usize - lx - 1);
+		wmemmove(cur->text + lx, cur->text + lx + 1, cur->usize - lx - 1);
 		cur->usize--;
 	} else {
 		if (cur->prev) {
@@ -264,18 +266,19 @@ static void goto_prevpage(void) {
 static void load_file(char * filename) {
 	FILE * f;
 	line_t * nl;
-	char buf[1024];
+	wchar_t buf[1024];
 	if ((f=fopen(filename, "r"))==NULL) {
-		fprintf(stderr, "Error: couldn't open '%s'.\n", filename);
+		fwprintf(stderr, L"Error: couldn't open '%s'.\n", filename);
 		exit(EXIT_FAILURE);
 	}
+	fwide(f, 1);
 	cur = NULL;
 	while (!feof(f)) {
-		fgets(buf, sizeof(buf), f);
+		fgetws(buf, sizeof(buf)/sizeof(*buf), f);
 		if (!feof(f)) {
-			size_t len = strlen(buf);
-			if (len>0 && buf[len-1] == '\n') {
-				buf[len-1] = '\0'; len--;
+			size_t len = wcslen(buf);
+			if (len>0 && buf[len-1] == L'\n') {
+				buf[len-1] = L'\0'; len--;
 			}
 			nl = create_line(buf, len);
 			if (cur) {
@@ -294,14 +297,15 @@ static void load_file(char * filename) {
 	fname = strdup(filename);
 }
 
-static char query(const char * question, const char * answers) {
-	int a;
+static wchar_t query(const wchar_t * question, const wchar_t * answers) {
+	wint_t a;
+	int rc;
 	clear_lastline();
-	mvprintw(height-1, 0, "%s", question);
-	move(height-1, strlen(question)+1);
+	mvaddwstr(height-1, 0, question);
+	move(height-1, wcswidth(question, wcslen(question))+1);
 	do {
-		a = getch();
-	} while (strchr(answers, a)==NULL);
+		rc = get_wch(&a);
+	} while (rc == ERR || wcschr(answers, a)==NULL);
 	clear_lastline();
 	return a;
 }
@@ -322,12 +326,12 @@ read_filename:
 		if (strlen(buf)>0) {
 			if (warn_if_exists) {
 				struct stat st;
-				if (stat(buf, &st)==0 && query("File exists. Overwrite (y/n)?", "yn")=='n')
+				if (stat(buf, &st)==0 && query(L"File exists. Overwrite (y/n)?", L"yn")==L'n')
 						goto read_filename;
 			}
 			fname = strdup(buf);
 		} else {
-			mvprintw(height-1, 0, "Aborted saving.");
+			mvaddwstr(height-1, 0, L"Aborted saving.");
 			return;
 		}
 	}
@@ -335,10 +339,14 @@ read_filename:
 		mvprintw(height-1, 0, "Error: couldn't open '%s' for writing.", fname);
 		return;
 	}
+	fwide(f, 1);
 	for (l = find_first(cur);l!=NULL;l=l->next) {
-		fwrite(l->text, l->usize, 1, f);
+		unsigned int i;
+		for (i=0;i<l->usize;i++) {
+			fputwc(l->text[i], f);
+		}
+		fputwc(L'\n', f);
 		size += l->usize + 1;
-		fputs("\n", f);
 	}
 	fclose(f);
 	mvprintw(height-1, 0, "Wrote '%s' (%u bytes).", fname, size);
@@ -346,18 +354,19 @@ read_filename:
 }
 
 static void version(void) {
-	printf("%s %s\n", PROGRAM_NAME, PROGRAM_VERSION);
+	wprintf(L"%s %s\n", PROGRAM_NAME, PROGRAM_VERSION);
 	exit(EXIT_SUCCESS);
 }
 
 static void usage(const char * argv0) {
-	printf("%s: usage: %s [--help|--version|<filename>]\n", argv0, argv0);
+	wprintf(L"%s: usage: %s [--help|--version|<filename>]\n", argv0, argv0);
 	exit(EXIT_SUCCESS);
 }
 
 int main(int argc, char * argv[]) {
 	int quit_loop = 0;
-	char * kn; int key;
+	char * kn; wint_t key;
+	int rc;
 
 	if (argc > 1) {
 		if (strcmp(argv[1], "-v")==0 || strcmp(argv[1], "--version")==0) {
@@ -370,7 +379,7 @@ int main(int argc, char * argv[]) {
 		if (cur == NULL) goto init_empty_buf;
 	} else {
 init_empty_buf:
-		cur = create_line("", 0);
+		cur = create_line(L"", 0);
 		cur->prev = NULL;
 		cur->next = NULL;
 	}
@@ -383,99 +392,100 @@ init_empty_buf:
 		getmaxyx(stdscr, height, width);
 		redraw_screen();
 		draw_text();
-		key = getch();
+		rc  = get_wch(&key);
 		clear_lastline();
-		if (ERR == key) continue;
-		kn = keyname(key);
-		/* fprintf(stderr, "key = %d keyname = %s\n", key, kn); */
-		if (strcmp(kn, "^A")==0) {
-			lx = x = 0;
-		} else if (strcmp(kn, "^E")==0) {
-			lx = cur->usize;
-			x = compute_width(cur->text, lx);
-		} else if (strcmp(kn, "^S")==0) {
-			save_to_file(0);
-		} else if (strcmp(kn, "^W")==0) {
-			char * oldfname = fname;
-			fname = NULL;
-			save_to_file(1);
-			if (NULL == fname) 
-				fname = oldfname;
-			else
-				free(oldfname);
-		} else if (strcmp(kn, "^K")==0) {
-			if (lx == cur->usize) {
-				merge_next_line();
-			} else {
-				cur->usize = lx;
+		if (ERR == rc) continue;
+		kn = key_name(key);
+		/* fprintf(stderr, "rc = %u (ERR = %u) key = %lc keyname = %s\n", rc, ERR, key, kn); */
+		if (kn != NULL) {
+			if (strcmp(kn, "^A")==0) {
+				lx = x = 0;
+			} else if (strcmp(kn, "^E")==0) {
+				lx = cur->usize;
+				x = compute_width(cur->text, lx);
+			} else if (strcmp(kn, "^S")==0) {
+				save_to_file(0);
+			} else if (strcmp(kn, "^W")==0) {
+				char * oldfname = fname;
+				fname = NULL;
+				save_to_file(1);
+				if (NULL == fname) 
+					fname = oldfname;
+				else
+					free(oldfname);
+			} else if (strcmp(kn, "^K")==0) {
+				if (lx == cur->usize) {
+					merge_next_line();
+				} else {
+					cur->usize = lx;
+				}
+				file_modified = 1;
+			} else if (strcmp(kn, "^X")==0) {
+				if (file_modified) {
+					wchar_t a = query(L"Save file (y/n/c)?", L"ync");
+					switch (a) {
+					case L'y': save_to_file(fname==NULL); /* fall-through */
+					case L'n': quit_loop = 1; break;
+					case L'c': break;
+					}
+				} else quit_loop = 1;
+			} else if (strcmp(kn, "^C")==0) {
+				quit_loop = 1;
+			} else if (strcmp(kn, "^M")==0) {
+				handle_enter();
+				file_modified = 1;
+			} else if (strcmp(kn, "^D")==0) {
+				handle_del();
+				file_modified = 1;
 			}
+		}
+		switch (key) {
+		case KEY_BACKSPACE:
+			handle_backspace();
 			file_modified = 1;
-		} else if (strcmp(kn, "^X")==0) {
-			if (file_modified) {
-				char a = query("Save file (y/n/c)?", "ync");
-				switch (a) {
-				case 'y': save_to_file(fname==NULL); /* fall-through */
-				case 'n': quit_loop = 1; break;
-				case 'c': break;
-				}
-			} else quit_loop = 1;
-		} else if (strcmp(kn, "^C")==0) {
-			quit_loop = 1;
-		} else if (strcmp(kn, "^M")==0) {
-			handle_enter();
+			break;
+		case KEY_DC:
+			handle_del();
 			file_modified = 1;
-		} else if (strcmp(kn, "^D")==0) {
-				handle_del();
-				file_modified = 1;
-		} else {
-			switch (key) {
-			case KEY_BACKSPACE:
-				handle_backspace();
-				file_modified = 1;
-				break;
-			case KEY_DC:
-				handle_del();
-				file_modified = 1;
-				break;
-			case KEY_UP:
-				if (cur->prev) {
-					cur = cur->prev;
-					decr_y();
-					correct_x();
-				}
-				break;
-			case KEY_DOWN:
-				if (cur->next) {
-					cur = cur->next;
-					incr_y();
-					correct_x();
-				}
-				break;
-			case KEY_LEFT: 
-				decr_x();
-				break;
-			case KEY_RIGHT:
-				incr_x();
-				break;
-			case KEY_NPAGE:
-				goto_nextpage();
-				break;
-			case KEY_PPAGE:
-				goto_prevpage();
-				break;
-			case '\t':
+			break;
+		case KEY_UP:
+			if (cur->prev) {
+				cur = cur->prev;
+				decr_y();
+				correct_x();
+			}
+			break;
+		case KEY_DOWN:
+			if (cur->next) {
+				cur = cur->next;
+				incr_y();
+				correct_x();
+			}
+			break;
+		case KEY_LEFT: 
+			decr_x();
+			break;
+		case KEY_RIGHT:
+			incr_x();
+			break;
+		case KEY_NPAGE:
+			goto_nextpage();
+			break;
+		case KEY_PPAGE:
+			goto_prevpage();
+			break;
+		case L'\t':
+			insert_char(key);
+			lx++;
+			x+=TABWIDTH;
+			break;
+		default:
+			if (key >= L' ' && rc != KEY_CODE_YES) {
 				insert_char(key);
-				lx++;
-				x+=TABWIDTH;
-				break;
-			default:
-				if (key >= 32 && key <= 255) {
-					insert_char(key);
-					file_modified = 1;
-					incr_x();
-				}
-				break;
+				file_modified = 1;
+				incr_x();
 			}
+			break;
 		}
 	}
 
