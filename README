@@ -23,12 +23,15 @@ Backspace     delete character left of the cursor
 DEL           delete character right of the cursor
 Return        insert new line
 Ctrl-A        go to begin of line
+Ctrl-B        move current line to bottom of screen
+Ctrl-C        cancel editor
 Ctrl-D        delete character right of the cursor
 Ctrl-E        go to end of line
-Ctrl-C        cancel editor
 Ctrl-S        save file
+Ctrl-T        move current line to top of screen
 Ctrl-W        save file as
 Ctrl-X        quit editor
+Ctrl-Z        move current line to center of screen
 
 
 Contact

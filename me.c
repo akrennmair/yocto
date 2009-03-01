@@ -438,6 +438,22 @@ init_empty_buf:
 				handle_enter();
 			} else if (strcmp(kn, "^D")==0) {
 				handle_del();
+			} else if (strcmp(kn, "^B")==0) {
+				while (y < height-3 && offset > 0) {
+					incr_y(); offset--;
+				}
+			} else if (strcmp(kn, "^T")==0) {
+				while (y > 0) {
+					decr_y(); offset++;
+				}
+			} else if (strcmp(kn, "^Z")==0) {
+				unsigned int middle = (height-3)/2;
+				while (y > middle) {
+					decr_y(); offset++;
+				}
+				while (y < middle && offset > 0) {
+					incr_y(); offset--;
+				}
 			}
 		}
 		switch (key) {
