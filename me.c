@@ -203,7 +203,7 @@ static void handle_enter() {
 	lx = x = 0;
 }
 
-static void merge_next_line() {
+static void merge_next_line(void) {
 	if (cur->next) {
 		line_t * n = cur->next;
 		size_t oldsize = cur->usize;
@@ -218,7 +218,16 @@ static void merge_next_line() {
 	}
 }
 
-static void handle_backspace() {
+static void handle_del(void) {
+	if (lx < cur->usize) {
+		memmove(cur->text + lx, cur->text + lx + 1, cur->usize - lx - 1);
+		cur->usize--;
+	} else {
+		merge_next_line();
+	}
+}
+
+static void handle_backspace(void) {
 	if (x > 0) {
 		decr_x();
 		memmove(cur->text + lx, cur->text + lx + 1, cur->usize - lx - 1);
@@ -413,10 +422,17 @@ int main(int argc, char * argv[]) {
 		} else if (strcmp(kn, "^M")==0) {
 			handle_enter();
 			file_modified = 1;
+		} else if (strcmp(kn, "^D")==0) {
+				handle_del();
+				file_modified = 1;
 		} else {
 			switch (key) {
 			case KEY_BACKSPACE:
 				handle_backspace();
+				file_modified = 1;
+				break;
+			case KEY_DC:
+				handle_del();
 				file_modified = 1;
 				break;
 			case KEY_UP:
