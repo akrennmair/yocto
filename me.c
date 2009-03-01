@@ -18,6 +18,7 @@ and you think this stuff is worth it, you can buy me a beer in return.
 #include <wchar.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <locale.h>
 
 #define PROGRAM_NAME "mein editor"
 #define PROGRAM_VERSION "0.1"
@@ -304,7 +305,7 @@ static wchar_t query(const wchar_t * question, const wchar_t * answers) {
 	mvaddwstr(height-1, 0, question);
 	move(height-1, wcswidth(question, wcslen(question))+1);
 	do {
-		rc = get_wch(&a);
+		rc = wget_wch(stdscr, &a);
 	} while (rc == ERR || wcschr(answers, a)==NULL);
 	clear_lastline();
 	return a;
@@ -368,6 +369,9 @@ int main(int argc, char * argv[]) {
 	char * kn; wint_t key;
 	int rc;
 
+	if (!setlocale(LC_ALL,""))
+		fprintf(stderr, "Warning: can't set locale!\n");
+
 	if (argc > 1) {
 		if (strcmp(argv[1], "-v")==0 || strcmp(argv[1], "--version")==0) {
 			version();
@@ -384,15 +388,14 @@ init_empty_buf:
 		cur->next = NULL;
 	}
 
-	initscr(); raw(); noecho();
-	nonl(); intrflush(stdscr, FALSE); keypad(stdscr, TRUE);
+	initscr(); raw(); noecho(); nonl(); keypad(stdscr, TRUE);
 	lx = offset = y = x = 0;
 
 	while (!quit_loop) {
 		getmaxyx(stdscr, height, width);
 		redraw_screen();
 		draw_text();
-		rc  = get_wch(&key);
+		rc  = wget_wch(stdscr, &key);
 		clear_lastline();
 		if (ERR == rc) continue;
 		kn = key_name(key);
@@ -489,6 +492,7 @@ init_empty_buf:
 		}
 	}
 
+	noraw();
 	endwin();
 
 	return 0;
