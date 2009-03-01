@@ -1,0 +1,20 @@
+README
+======
+
+mein editor (me) is a minimalistic ncurses-based text editor for Unix-like
+operating systems.
+
+Installation
+------------
+To build and install me, simply run "make" and "make install".
+
+Build dependencies:
+- ncurses (tested with 5.4)
+
+Contact
+-------
+For feedback, don't hesitate to contact Andreas Krennmair <ak@synflood.at>.
+
+License
+-------
+For license information please see the file LICENSE.
