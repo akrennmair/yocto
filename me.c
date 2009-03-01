@@ -62,6 +62,14 @@ static inline void decr_y(void) {
 	else offset--;
 }
 
+static inline void incr_x(void) {
+	if (x < cur->usize && x < width-1) x++;
+}
+
+static inline void decr_x(void) {
+	if (x > 0) x--; 
+}
+
 static void redraw_screen() {
 	attrset(A_REVERSE);
 	clrline(height-2);
@@ -84,7 +92,14 @@ static void draw_text() {
 	tmp = cur;
 	for (i=y;i<(int)height-2 && tmp!=NULL;i++) {
 		clrline(i);
-		mvaddnstr(i, 0, tmp->text, tmp->usize > width ? width : tmp->usize);
+		if (tmp->usize > width) {
+			mvaddnstr(i, 0, tmp->text, width);
+			attrset(A_BOLD);
+			mvaddstr(i, width-1, "$");
+			attrset(A_NORMAL);
+		} else {
+			mvaddnstr(i, 0, tmp->text, tmp->usize);
+		}
 		tmp = tmp->next;
 	}
 	attrset(A_BOLD);
@@ -142,7 +157,7 @@ static void merge_next_line() {
 
 static void handle_backspace() {
 	if (x > 0) {
-		x--; 
+		decr_x();
 		memmove(cur->text + x, cur->text + x + 1, cur->usize - x - 1);
 		cur->usize--;
 	} else {
@@ -338,16 +353,16 @@ int main(int argc, char * argv[]) {
 				}
 				break;
 			case KEY_LEFT: 
-				if (x > 0) x--; 
+				decr_x();
 				break;
 			case KEY_RIGHT:
-				if (x < cur->usize) x++;
+				incr_x();
 				break;
 			default:
 				if (key >= 32) {
 					insert_char(key);
 					file_modified = 1;
-					x++;
+					incr_x();
 				}
 				break;
 			}
