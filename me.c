@@ -178,6 +178,22 @@ static void handle_backspace() {
 	}
 }
 
+static void goto_nextpage(void) {
+	unsigned int i;
+	for (i=0;i<height-3 && cur->next!=NULL;i++) {
+		cur = cur->next;
+		incr_y();
+	}
+}
+
+static void goto_prevpage(void) {
+	unsigned int i;
+	for (i=0;i<height-3 && cur->prev!=NULL;i++) {
+		cur = cur->prev;
+		decr_y();
+	}
+}
+
 static void load_file(char * filename) {
 	FILE * f;
 	line_t * nl;
@@ -293,9 +309,8 @@ int main(int argc, char * argv[]) {
 	nonl(); intrflush(stdscr, FALSE); keypad(stdscr, TRUE);
 	offset = y = x = 0;
 
-	getmaxyx(stdscr, height, width);
-
 	while (!quit_loop) {
+		getmaxyx(stdscr, height, width);
 		redraw_screen();
 		draw_text();
 		key = getch();
@@ -363,6 +378,12 @@ int main(int argc, char * argv[]) {
 				break;
 			case KEY_RIGHT:
 				incr_x();
+				break;
+			case KEY_NPAGE:
+				goto_nextpage();
+				break;
+			case KEY_PPAGE:
+				goto_prevpage();
 				break;
 			default:
 				if (key >= 32) {
