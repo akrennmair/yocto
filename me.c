@@ -185,8 +185,8 @@ static void resize_line(line_t * l, size_t size) {
 
 static void insert_char(int key) {
 	resize_line(cur, cur->usize + 1);
-	memmove(cur->text + x + 1, cur->text + x, cur->usize - x);
-	cur->text[x] = (char)key;
+	memmove(cur->text + lx + 1, cur->text + lx, cur->usize - lx);
+	cur->text[lx] = (char)key;
 }
 
 static void handle_enter() {
@@ -462,6 +462,11 @@ init_empty_buf:
 				break;
 			case KEY_PPAGE:
 				goto_prevpage();
+				break;
+			case '\t':
+				insert_char(key);
+				lx++;
+				x+=TABWIDTH;
 				break;
 			default:
 				if (key >= 32 && key <= 255) {
