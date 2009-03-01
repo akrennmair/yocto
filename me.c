@@ -255,6 +255,7 @@ static void goto_nextpage(void) {
 		cur = cur->next;
 		incr_y();
 	}
+	correct_x();
 }
 
 static void goto_prevpage(void) {
@@ -263,6 +264,7 @@ static void goto_prevpage(void) {
 		cur = cur->prev;
 		decr_y();
 	}
+	correct_x();
 }
 
 static void load_file(char * filename) {
