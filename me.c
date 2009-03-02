@@ -36,6 +36,8 @@ static line_t * cur = NULL;
 static unsigned int width, height, lx, x, y, offset;
 static char * fname = NULL;
 static int file_modified = 0;
+static int quit_loop = 0;
+static wint_t key;
 
 static line_t * find_first(line_t * l) {
 	while (l->prev != NULL)
@@ -53,7 +55,16 @@ static size_t compute_width(const wchar_t * text, size_t len) {
 	return rv;
 }
 
-static void align_x() {
+static void goto_bol(void) {
+	lx = x = 0;
+}
+
+static void goto_eol(void) {
+	lx = cur->usize;
+	x = compute_width(cur->text, lx);
+}
+
+static void align_x(void) {
 	unsigned int i;
 	unsigned int newx = 0;
 	for (i=0;i<cur->usize;i++) {
@@ -354,6 +365,7 @@ static wchar_t query(const wchar_t * question, const wchar_t * answers) {
 	return a;
 }
 
+
 static void save_to_file(int warn_if_exists) {
 	FILE * f;
 	line_t * l;
@@ -397,6 +409,76 @@ read_filename:
 	file_modified = 0;
 }
 
+static void save_to_file_0(void) { save_to_file(0); }
+
+static void save_file_as(void) {
+	char * oldfname = fname;
+	fname = NULL;
+	save_to_file(1);
+	if (NULL == fname) fname = oldfname;
+	else free(oldfname);
+}
+
+static void kill_to_eol(void) {
+	if (lx == cur->usize) merge_next_line();
+	else cur->usize = lx;
+	file_modified = 1;
+}
+
+static void do_exit(void) {
+	if (file_modified) {
+		wchar_t a = query(L"Save file (y/n/c)?", L"ync");
+		switch (a) {
+		case L'y': save_to_file(fname==NULL); /* fall-through */
+		case L'n': quit_loop = 1; break;
+		case L'c': break;
+		}
+	} else quit_loop = 1;
+}
+
+static void do_cancel(void) {
+	quit_loop = 1;
+}
+
+static void goto_bottom(void) {
+	while (y < height-3 && offset > 0) {
+		incr_y(); offset--;
+	}
+}
+
+static void goto_top(void) {
+	while (y > 0) {
+		decr_y(); offset++;
+	}
+}
+
+static void handle_keyup(void) {
+	if (cur->prev) {
+		cur = cur->prev;
+		decr_y();
+		correct_x();
+	}
+}
+
+static void handle_keydown(void) {
+	if (cur->next) {
+		cur = cur->next;
+		incr_y();
+		correct_x();
+	}
+}
+
+static void handle_tab(void) {
+	insert_char(key);
+	lx++;
+	x+=TABWIDTH;
+}
+
+static void handle_other_key(wint_t key) {
+	insert_char(key);
+	incr_x();
+}
+
 static void version(void) {
 	wprintf(L"%s %s\n", PROGRAM_NAME, PROGRAM_VERSION);
 	exit(EXIT_SUCCESS);
@@ -407,9 +489,37 @@ static void usage(const char * argv0) {
 	exit(EXIT_SUCCESS);
 }
 
+static struct {
+	void (*func)(void);
+	const char * keyname;
+	wint_t key;
+} funcs[] = {
+	{ goto_eol,         "^E", 0             },
+	{ goto_bol,         "^A", 0             },
+	{ save_to_file_0,   "^S", 0             },
+	{ save_file_as,     "^W", 0             },
+	{ handle_enter,     "^M", 0             },
+	{ center_curline,   "^Z", 0             },
+	{ goto_top,         "^T", 0             },
+	{ goto_bottom,      "^B", 0             },
+	{ handle_goto,      "^G", 0             },
+	{ do_exit,          "^X", 0             },
+	{ do_cancel,        "^C", 0             },
+	{ kill_to_eol,      "^K", 0             },
+	{ handle_backspace, NULL, KEY_BACKSPACE },
+	{ handle_del,       "^D", KEY_DC        },
+	{ decr_x,           NULL, KEY_LEFT      },
+	{ incr_x,           NULL, KEY_RIGHT     },
+	{ handle_keydown,   NULL, KEY_DOWN      },
+	{ handle_keyup,     NULL, KEY_UP        },
+	{ handle_tab,       NULL, L'\t'         },
+	{ goto_nextpage,    NULL, KEY_NPAGE     },
+	{ goto_prevpage,    NULL, KEY_PPAGE     },
+	{ NULL,             NULL, 0             }
+};
+
 int main(int argc, char * argv[]) {
-	int quit_loop = 0;
-	char * kn; wint_t key;
+	char * kn;
 	int rc;
 
 	if (!setlocale(LC_ALL,""))
@@ -439,115 +549,24 @@ init_empty_buf:
 		cur->next = NULL;
 	}
 
+begin_loop:
 	while (!quit_loop) {
-		redraw_screen();
-		draw_text();
+		unsigned int i;
+		redraw_screen(); draw_text();
 		rc  = wget_wch(stdscr, &key);
 		clear_lastline();
 		if (ERR == rc) continue;
 		kn = key_name(key);
-		/* fprintf(stderr, "rc = %u (ERR = %u) key = %lc keyname = %s\n", rc, ERR, key, kn); */
-		if (kn != NULL) {
-			if (strcmp(kn, "^A")==0) {
-				lx = x = 0;
-			} else if (strcmp(kn, "^E")==0) {
-				lx = cur->usize;
-				x = compute_width(cur->text, lx);
-			} else if (strcmp(kn, "^S")==0) {
-				save_to_file(0);
-			} else if (strcmp(kn, "^W")==0) {
-				char * oldfname = fname;
-				fname = NULL;
-				save_to_file(1);
-				if (NULL == fname) 
-					fname = oldfname;
-				else
-					free(oldfname);
-			} else if (strcmp(kn, "^K")==0) {
-				if (lx == cur->usize) {
-					merge_next_line();
-				} else {
-					cur->usize = lx;
-				}
-				file_modified = 1;
-			} else if (strcmp(kn, "^X")==0) {
-				if (file_modified) {
-					wchar_t a = query(L"Save file (y/n/c)?", L"ync");
-					switch (a) {
-					case L'y': save_to_file(fname==NULL); /* fall-through */
-					case L'n': quit_loop = 1; break;
-					case L'c': break;
-					}
-				} else quit_loop = 1;
-			} else if (strcmp(kn, "^C")==0) {
-				quit_loop = 1;
-			} else if (strcmp(kn, "^M")==0) {
-				handle_enter();
-			} else if (strcmp(kn, "^D")==0) {
-				handle_del();
-			} else if (strcmp(kn, "^B")==0) {
-				while (y < height-3 && offset > 0) {
-					incr_y(); offset--;
-				}
-			} else if (strcmp(kn, "^T")==0) {
-				while (y > 0) {
-					decr_y(); offset++;
-				}
-			} else if (strcmp(kn, "^Z")==0) {
-				center_curline();
-			} else if (strcmp(kn, "^G")==0) {
-				handle_goto();
+		for (i=0;funcs[i].func != NULL;++i) {
+			if ((kn!=NULL && funcs[i].keyname!=NULL && strcmp(kn,funcs[i].keyname)==0) || 
+				(key != 0 && funcs[i].key!=0 && funcs[i].key==key)) {
+				funcs[i].func(); goto begin_loop;
 			}
 		}
-		switch (key) {
-		case KEY_BACKSPACE:
-			handle_backspace();
-			break;
-		case KEY_DC:
-			handle_del();
-			break;
-		case KEY_UP:
-			if (cur->prev) {
-				cur = cur->prev;
-				decr_y();
-				correct_x();
-			}
-			break;
-		case KEY_DOWN:
-			if (cur->next) {
-				cur = cur->next;
-				incr_y();
-				correct_x();
-			}
-			break;
-		case KEY_LEFT: 
-			decr_x();
-			break;
-		case KEY_RIGHT:
-			incr_x();
-			break;
-		case KEY_NPAGE:
-			goto_nextpage();
-			break;
-		case KEY_PPAGE:
-			goto_prevpage();
-			break;
-		case L'\t':
-			insert_char(key);
-			lx++;
-			x+=TABWIDTH;
-			break;
-		default:
-			if (key >= L' ' && rc != KEY_CODE_YES) {
-				insert_char(key);
-				incr_x();
-			}
-			break;
-		}
+		if (key >= L' ' && rc != KEY_CODE_YES) 
+			handle_other_key(key);
 	}
 
-	noraw();
-	endwin();
-
+	noraw(); endwin();
 	return 0;
 }
