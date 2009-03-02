@@ -20,8 +20,8 @@ and you think this stuff is worth it, you can buy me a beer in return.
 #include <sys/stat.h>
 #include <locale.h>
 
-#define PROGRAM_NAME "mein editor"
-#define PROGRAM_VERSION "0.1"
+#define NAME "mein editor"
+#define VERSION "0.1"
 #define TABWIDTH 8
 
 #define clrline(i) do { move(i, 0); clrtoeol(); } while(0)
@@ -40,62 +40,53 @@ static int quit_loop = 0;
 static wint_t key;
 
 static line_t * find_first(line_t * l) {
-	while (l->prev != NULL)
-		l = l->prev;
+	while (l->prev != NULL) l = l->prev;
 	return l;
 }
 
 static size_t compute_width(const wchar_t * text, size_t len) {
 	size_t rv = 0;
-	unsigned int i;
-	for (i=0;i<len;i++) {
+	for (unsigned i=0;i<len;i++) {
 		if (text[i] == L'\t') rv += TABWIDTH;
 		else rv += wcwidth(text[i]);
 	}
 	return rv;
 }
 
-static void goto_bol(void) {
-	lx = x = 0;
-}
+static void goto_bol(void) { lx = x = 0; }
 
 static void goto_eol(void) {
-	lx = cur->usize;
-	x = compute_width(cur->text, lx);
+	x = compute_width(cur->text, (lx = cur->usize));
 }
 
 static void align_x(void) {
-	unsigned int i;
 	unsigned int newx = 0;
+	unsigned int i;
 	for (i=0;i<cur->usize;i++) {
 		if (cur->text[i] == '\t') newx += TABWIDTH;
 		else newx += wcwidth(cur->text[i]);
 		if (newx > x) break;
 	}
-	lx = i;
-	x = compute_width(cur->text, lx);
+	x = compute_width(cur->text, (lx = i));
 }
 
 static void correct_x(void) {
 	if (lx > cur->usize || x > compute_width(cur->text, cur->usize)) {
-		lx = cur->usize;
-		x = compute_width(cur->text, lx);
+		x = compute_width(cur->text, (lx = cur->usize));
 	} else {
 		align_x();
 	}
 }
 
-static size_t print_line(unsigned int ycoord, const wchar_t * text, size_t len) {
+static size_t print_line(unsigned int yc, const wchar_t * text, size_t len) {
 	size_t col = 0;
-	unsigned int i = 0;
-	for (i=0;i<len && col<width;i++) {
+	for (unsigned int i=0;i<len && col<width;i++) {
 		if (text[i] == '\t') {
-			unsigned int j;
-			for (j=0;j<TABWIDTH;j++)
-				mvaddwstr(ycoord, col+j, L" ");
+			for (unsigned int j=0;j<TABWIDTH;j++)
+				mvaddwstr(yc, col+j, L" ");
 			col += TABWIDTH;
 		} else {
-			mvaddnwstr(ycoord, col, text + i, 1);
+			mvaddnwstr(yc, col, text + i, 1);
 			col += wcwidth(text[i]);
 		}
 	}
@@ -144,18 +135,18 @@ static inline void decr_x(void) {
 static void redraw_screen() {
 	attrset(A_REVERSE);
 	mvprintw(height-2, 0, "%*s", width, "");
-	mvprintw(height-2, 0, "[" PROGRAM_NAME " " PROGRAM_VERSION "] %s %s [%u|%u-%u]", 
-		file_modified ? "*" : "-", fname ? fname : "<no file>", offset + y + 1, lx + 1, x + 1);
+	mvprintw(height-2, 0, "[" NAME " " VERSION "] %s %s [%u|%u-%u]",
+		file_modified ? "*" : "-", fname ? fname : "<no file>",
+		offset + y + 1, lx + 1, x + 1);
 	attrset(A_NORMAL);
 }
 
 static void draw_text() {
-	int i;
+	unsigned int i;
 	line_t * tmp = cur->prev;
 	if (y > 0) {
 		for (i=y-1;i>=0 && tmp!=NULL;i--,tmp=tmp->prev) {
-			clrline(i);
-			print_line(i, tmp->text, tmp->usize);
+			clrline(i); print_line(i, tmp->text, tmp->usize);
 		}
 	}
 	tmp = cur;
@@ -166,9 +157,7 @@ static void draw_text() {
 		attrset(attr);
 		if (compute_width(tmp->text, tmp->usize) > width) {
 			print_line(i, tmp->text, tmp->usize);
-			attrset(attr | A_BOLD);
-			mvaddwstr(i, width-1, L"$");
-			attrset(attr);
+			attrset(attr | A_BOLD); mvaddwstr(i, width-1, L"$"); attrset(attr);
 		} else {
 			size_t col = print_line(i, tmp->text, tmp->usize);
 			mvprintw(i,col,"%*s", width-col, "");
@@ -179,9 +168,7 @@ static void draw_text() {
 	for (;i<(int)height-2;i++) {
 		clrline(i); mvaddwstr(i, 0, L"~");
 	}
-	attrset(A_NORMAL);
-	move(y, x);
-	refresh();
+	attrset(A_NORMAL); move(y, x); refresh();
 }
 
 static void resize_line(line_t * l, size_t size) {
@@ -203,14 +190,10 @@ static void handle_enter() {
 	line_t * l;
 	l = create_line(cur->text + x, cur->usize - lx);
 	cur->usize = x;
-	if (cur->next)
-		cur->next->prev = l;
-	l->next = cur->next;
-	l->prev = cur;
-	cur->next = l;
-	cur = cur->next;
-	incr_y();
-	lx = x = 0;
+	if (cur->next) cur->next->prev = l;
+	l->next = cur->next; l->prev = cur;
+	cur->next = l; cur = cur->next;
+	incr_y(); lx = x = 0;
 	file_modified = 1;
 }
 
@@ -220,9 +203,7 @@ static void merge_next_line(void) {
 		size_t oldsize = cur->usize;
 		resize_line(cur, cur->usize + n->usize);
 		wmemmove(cur->text + oldsize, n->text, n->usize);
-		if (n->next) {
-			n->next->prev = cur;
-		}
+		if (n->next) n->next->prev = cur;
 		cur->next = n->next;
 		free(n->text);
 		free(n);
@@ -231,24 +212,18 @@ static void merge_next_line(void) {
 
 static void center_curline(void) {
 	unsigned int middle = (height-3)/2;
-	while (y > middle) {
-		decr_y(); offset++;
-	}
+	while (y > middle) decr_y(); offset++;
 	while (y < middle && offset > 0) {
 		incr_y(); offset--;
 	}
 }
 
 static void handle_goto(void) {
-	char buf[16];
-	char * ptr;
-	unsigned int pos;
+	char buf[16]; char * ptr; unsigned int pos;
 #define GOTO_PROMPT "Go to line:"
 	mvprintw(height-1, 0, GOTO_PROMPT);
-	echo();
-	mvgetnstr(height-1, sizeof(GOTO_PROMPT), buf, sizeof(buf));
-	noecho();
-	clear_lastline();
+	echo(); mvgetnstr(height-1, sizeof(GOTO_PROMPT), buf, sizeof(buf)); 
+	noecho(); clear_lastline();
 	pos = strtoul(buf, &ptr, 10);
 	if (ptr > buf) {
 		unsigned int curpos = y + offset;
@@ -270,8 +245,7 @@ static void handle_goto(void) {
 		if (l) {
 			while (tmp > 0) { incr_y(); tmp--; }
 			while (tmp < 0) { decr_y(); tmp++; }
-			cur = l;
-			center_curline();
+			cur = l; center_curline();
 		} else mvaddwstr(height-1, 0, L"Line number too large.");
 	}
 }
@@ -280,9 +254,7 @@ static void handle_del(void) {
 	if (lx < cur->usize) {
 		wmemmove(cur->text + lx, cur->text + lx + 1, cur->usize - lx - 1);
 		cur->usize--;
-	} else {
-		merge_next_line();
-	}
+	} else merge_next_line();
 	file_modified = 1;
 }
 
@@ -293,42 +265,34 @@ static void handle_backspace(void) {
 		cur->usize--;
 	} else if (cur->prev) {
 		size_t oldsize;
-		cur = cur->prev;
-		oldsize = cur->usize;
-		merge_next_line();
-		decr_y();
-		lx = oldsize;
-		x = compute_width(cur->text, lx);
+		cur = cur->prev; oldsize = cur->usize;
+		merge_next_line(); decr_y();
+		x = compute_width(cur->text, (lx = oldsize));
 	}
 	file_modified = 1;
 }
 
 static void goto_nextpage(void) {
-	unsigned int i;
-	for (i=0;i<height-3 && cur->next!=NULL;i++,cur=cur->next)
+	for (unsigned int i=0;i<height-3 && cur->next!=NULL;i++,cur=cur->next) 
 		incr_y();
 	correct_x();
 }
 
 static void goto_prevpage(void) {
-	unsigned int i;
-	for (i=0;i<height-3 && cur->prev!=NULL;i++,cur=cur->prev)
+	for (unsigned int i=0;i<height-3 && cur->prev!=NULL;i++,cur=cur->prev)
 		decr_y();
 	correct_x();
 }
 
 static void load_file(char * filename) {
-	FILE * f;
-	line_t * l;
-	wchar_t buf[1024];
+	FILE * f; line_t * l; wchar_t buf[1024];
 	fname = strdup(filename);
 	if ((f=fopen(fname, "r"))==NULL) {
 		mvprintw(height-1, 0, "New file: %s", fname);
 		cur = NULL;
 		return;
 	}
-	fwide(f, 1);
-	cur = NULL;
+	fwide(f, 1); cur = NULL;
 	while (!feof(f)) {
 		fgetws(buf, sizeof(buf)/sizeof(*buf), f);
 		if (!feof(f)) {
@@ -338,10 +302,8 @@ static void load_file(char * filename) {
 			}
 			l = create_line(buf, len);
 			if (cur) {
-				l->next = cur->next;
-				l->prev = cur;
-				cur->next = l;
-				cur = cur->next;
+				l->next = cur->next; l->prev = cur;
+				cur->next = l; cur = cur->next;
 			} else {
 				l->prev = l->next = NULL;
 				cur = l;
@@ -353,10 +315,8 @@ static void load_file(char * filename) {
 }
 
 static wchar_t query(const wchar_t * question, const wchar_t * answers) {
-	wint_t a;
-	int rc;
-	clear_lastline();
-	mvaddwstr(height-1, 0, question);
+	wint_t a; int rc;
+	clear_lastline(); mvaddwstr(height-1, 0, question);
 	move(height-1, wcswidth(question, wcslen(question))+1);
 	do {
 		rc = wget_wch(stdscr, &a);
@@ -368,21 +328,19 @@ static wchar_t query(const wchar_t * question, const wchar_t * answers) {
 
 static void save_to_file(int warn_if_exists) {
 	FILE * f;
-	line_t * l;
 	size_t size = 0;
 	if (fname == NULL) {
 		char buf[256];
 #define SAVE_PROMPT "Save to file:"
 read_filename:
 		mvprintw(height-1, 0, SAVE_PROMPT);
-		echo();
-		mvgetnstr(height-1, sizeof(SAVE_PROMPT), buf, sizeof(buf));
-		noecho();
-		clear_lastline();
+		echo(); mvgetnstr(height-1, sizeof(SAVE_PROMPT), buf, sizeof(buf));
+		noecho(); clear_lastline();
 		if (strlen(buf)>0) {
 			if (warn_if_exists) {
 				struct stat st;
-				if (stat(buf, &st)==0 && query(L"File exists. Overwrite (y/n)?", L"yn")==L'n')
+				if (stat(buf, &st)==0 && 
+				query(L"File exists. Overwrite (y/n)?", L"yn")==L'n')
 						goto read_filename;
 			}
 			fname = strdup(buf);
@@ -396,24 +354,20 @@ read_filename:
 		return;
 	}
 	fwide(f, 1);
-	for (l = find_first(cur);l!=NULL;l=l->next) {
+	for (line_t * l = find_first(cur);l!=NULL;l=l->next) {
 		unsigned int i;
-		for (i=0;i<l->usize;i++) {
-			fputwc(l->text[i], f);
-		}
+		for (i=0;i<l->usize;i++) fputwc(l->text[i], f);
 		fputwc(L'\n', f);
 		size += l->usize + 1;
 	}
-	fclose(f);
-	mvprintw(height-1, 0, "Wrote '%s' (%u bytes).", fname, size);
+	fclose(f); mvprintw(height-1, 0, "Wrote '%s' (%u bytes).", fname, size);
 	file_modified = 0;
 }
 
 static void save_to_file_0(void) { save_to_file(0); }
 
 static void save_file_as(void) {
-	char * oldfname = fname;
-	fname = NULL;
+	char * oldfname = fname; fname = NULL;
 	save_to_file(1);
 	if (NULL == fname) fname = oldfname;
 	else free(oldfname);
@@ -446,42 +400,22 @@ static void goto_bottom(void) {
 	}
 }
 
-static void goto_top(void) {
-	while (y > 0) {
-		decr_y(); offset++;
-	}
-}
+static void goto_top(void) { while (y > 0) { decr_y(); offset++; } }
 
 static void handle_keyup(void) {
-	if (cur->prev) {
-		cur = cur->prev;
-		decr_y();
-		correct_x();
-	}
+	if (cur->prev) { cur = cur->prev; decr_y(); correct_x(); }
 }
 
 static void handle_keydown(void) {
-	if (cur->next) {
-		cur = cur->next;
-		incr_y();
-		correct_x();
-	}
+	if (cur->next) { cur = cur->next; incr_y(); correct_x(); }
 }
 
-static void handle_tab(void) {
-	insert_char(key);
-	lx++;
-	x+=TABWIDTH;
-}
+static void handle_tab(void) { insert_char(key); lx++; x+=TABWIDTH; }
 
-static void handle_other_key(wint_t key) {
-	insert_char(key);
-	incr_x();
-}
+static void handle_other_key(wint_t key) { insert_char(key); incr_x(); }
 
 static void version(void) {
-	wprintf(L"%s %s\n", PROGRAM_NAME, PROGRAM_VERSION);
-	exit(EXIT_SUCCESS);
+	wprintf(L"%s %s\n", NAME, VERSION); exit(EXIT_SUCCESS);
 }
 
 static void usage(const char * argv0) {
@@ -490,9 +424,7 @@ static void usage(const char * argv0) {
 }
 
 static struct {
-	void (*func)(void);
-	const char * keyname;
-	wint_t key;
+	void (*func)(void); const char * keyname; wint_t key;
 } funcs[] = {
 	{ goto_eol,         "^E", 0             },
 	{ goto_bol,         "^A", 0             },
@@ -522,16 +454,13 @@ int main(int argc, char * argv[]) {
 	char * kn;
 	int rc;
 
-	if (!setlocale(LC_ALL,""))
-		fprintf(stderr, "Warning: can't set locale!\n");
+	if (!setlocale(LC_ALL,"")) fprintf(stderr, "Warning: can't set locale!\n");
 
 	if (argc > 1) {
-		if (strcmp(argv[1], "-v")==0 || strcmp(argv[1], "--version")==0) {
+		if (strcmp(argv[1], "-v")==0 || strcmp(argv[1], "--version")==0)
 			version();
-		}
-		if (strcmp(argv[1], "-h")==0 || strcmp(argv[1], "--help")==0) {
+		if (strcmp(argv[1], "-h")==0 || strcmp(argv[1], "--help")==0)
 			usage(argv[0]);
-		}
 	}
 
 
@@ -558,15 +487,13 @@ begin_loop:
 		if (ERR == rc) continue;
 		kn = key_name(key);
 		for (i=0;funcs[i].func != NULL;++i) {
-			if ((kn!=NULL && funcs[i].keyname!=NULL && strcmp(kn,funcs[i].keyname)==0) || 
+			if ((kn!=NULL && funcs[i].keyname!=NULL && strcmp(kn,funcs[i].keyname)==0) ||
 				(key != 0 && funcs[i].key!=0 && funcs[i].key==key)) {
 				funcs[i].func(); goto begin_loop;
 			}
 		}
-		if (key >= L' ' && rc != KEY_CODE_YES) 
-			handle_other_key(key);
+		if (key >= L' ' && rc != KEY_CODE_YES) handle_other_key(key);
 	}
 
-	noraw(); endwin();
-	return 0;
+	noraw(); endwin(); return 0;
 }
