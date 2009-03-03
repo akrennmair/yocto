@@ -1,6 +1,6 @@
 /*
 ------------------------------------------------------------------------------
- mein editor, a minimalistic ncurses-based text editor.
+ yocto, a minimalistic ncurses-based text editor.
 ------------------------------------------------------------------------------
 "THE BEER-WARE LICENSE" (Revision 42):
 Andreas Krennmair <ak@synflood.at> wrote this program.  As long as you retain
@@ -20,7 +20,7 @@ and you think this stuff is worth it, you can buy me a beer in return.
 #include <sys/stat.h>
 #include <locale.h>
 
-#define NAME "mein editor"
+#define NAME "yocto"
 #define VERSION "0.1"
 #define TABWIDTH 8
 

@@ -1,12 +1,12 @@
 README
 ======
 
-mein editor (me) is a minimalistic ncurses-based text editor for Unix-like
-operating systems.
+yocto is a minimalistic ncurses-based text editor for Unix-like operating
+systems.
 
 Installation
 ------------
-To build and install me, simply run "make" and "make install".
+To build and install yocto, simply run "make" and "make install".
 
 Build dependencies:
 - ncurses (tested with 5.4)
