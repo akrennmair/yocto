@@ -133,17 +133,14 @@ static inline void decr_x(void) {
 }
 
 static void redraw_screen() {
+	int i;
+	line_t * tmp = cur->prev;
 	attrset(A_REVERSE);
 	mvprintw(height-2, 0, "%*s", width, "");
 	mvprintw(height-2, 0, "[" NAME " " VERSION "] %s %s [%u|%u-%u]",
 		file_modified ? "*" : "-", fname ? fname : "<no file>",
 		offset + y + 1, lx + 1, x + 1);
 	attrset(A_NORMAL);
-}
-
-static void draw_text() {
-	unsigned int i;
-	line_t * tmp = cur->prev;
 	if (y > 0) {
 		for (i=y-1;i>=0 && tmp!=NULL;i--,tmp=tmp->prev) {
 			clrline(i); print_line(i, tmp->text, tmp->usize);
@@ -212,10 +209,8 @@ static void merge_next_line(void) {
 
 static void center_curline(void) {
 	unsigned int middle = (height-3)/2;
-	while (y > middle) decr_y(); offset++;
-	while (y < middle && offset > 0) {
-		incr_y(); offset--;
-	}
+	while (y > middle) { decr_y(); offset++; }
+	while (y < middle && offset > 0) { incr_y(); offset--; }
 }
 
 static void handle_goto(void) {
@@ -423,23 +418,32 @@ static void usage(const char * argv0) {
 	exit(EXIT_SUCCESS);
 }
 
+static void tabula_rasa(void) {
+	noraw(); endwin();
+	initscr(); raw(); noecho(); nonl(); keypad(stdscr, TRUE);
+	getmaxyx(stdscr, height, width);
+	for (unsigned int i=0;i<height;i++) clrline(i);
+	refresh();
+}
+
 static struct {
 	void (*func)(void); const char * keyname; wint_t key;
 } funcs[] = {
-	{ goto_eol,         "^E", 0             },
 	{ goto_bol,         "^A", 0             },
-	{ save_to_file_0,   "^S", 0             },
-	{ save_file_as,     "^W", 0             },
-	{ handle_enter,     "^M", 0             },
-	{ center_curline,   "^Z", 0             },
-	{ goto_top,         "^T", 0             },
 	{ goto_bottom,      "^B", 0             },
-	{ handle_goto,      "^G", 0             },
-	{ do_exit,          "^X", 0             },
 	{ do_cancel,        "^C", 0             },
-	{ kill_to_eol,      "^K", 0             },
-	{ handle_backspace, NULL, KEY_BACKSPACE },
 	{ handle_del,       "^D", KEY_DC        },
+	{ goto_eol,         "^E", 0             },
+	{ handle_goto,      "^G", 0             },
+	{ kill_to_eol,      "^K", 0             },
+	{ tabula_rasa,      "^L", 0             },
+	{ handle_enter,     "^M", 0             },
+	{ save_to_file_0,   "^S", 0             },
+	{ goto_top,         "^T", 0             },
+	{ save_file_as,     "^W", 0             },
+	{ do_exit,          "^X", 0             },
+	{ center_curline,   "^Z", 0             },
+	{ handle_backspace, NULL, KEY_BACKSPACE },
 	{ decr_x,           NULL, KEY_LEFT      },
 	{ incr_x,           NULL, KEY_RIGHT     },
 	{ handle_keydown,   NULL, KEY_DOWN      },
@@ -481,7 +485,7 @@ init_empty_buf:
 begin_loop:
 	while (!quit_loop) {
 		unsigned int i;
-		redraw_screen(); draw_text();
+		redraw_screen();
 		rc  = wget_wch(stdscr, &key);
 		clear_lastline();
 		if (ERR == rc) continue;

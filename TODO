@@ -1,7 +1,10 @@
 TODO list:
 - open file
 - copy/paste
-- documentation
+- make Ctrl-C dump out the current state to a temporary file
+
 
 DONE:
 - correct handling of the tab character
+- documentation
+- implement Ctrl-L
