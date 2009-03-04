@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-O2 -Wall -std=c99
-LIBS=-lncursesw
+LIBS=-lncurses
 LDFLAGS=
 OBJS=$(patsubst %.c,%.o,$(wildcard *.c))
 TARGET=yocto

@@ -20,11 +20,13 @@ and you think this stuff is worth it, you can buy me a beer in return.
 #include <sys/stat.h>
 #include <locale.h>
 
-#define NAME "yocto"
-#define VERSION "0.1"
+#define NAME_VERSION "yocto 0.1"
 #define TABWIDTH 8
 
 #define clrline(i) do { move(i, 0); clrtoeol(); } while(0)
+#define PROMPT(pr,buf) do { mvprintw(height-1, 0, (pr)); echo(); \
+	mvgetnstr(height-1, sizeof(pr), buf, sizeof(buf)); noecho(); \
+	clear_lastline(); } while(0)
 
 typedef struct line {
 	struct line * prev, * next; /* previous line, next line */
@@ -137,7 +139,7 @@ static void redraw_screen() {
 	line_t * tmp = cur->prev;
 	attrset(A_REVERSE);
 	mvprintw(height-2, 0, "%*s", width, "");
-	mvprintw(height-2, 0, "[" NAME " " VERSION "] %s %s [%u|%u-%u]",
+	mvprintw(height-2, 0, "[" NAME_VERSION "] %s %s [%u|%u-%u]",
 		file_modified ? "*" : "-", fname ? fname : "<no file>",
 		offset + y + 1, lx + 1, x + 1);
 	attrset(A_NORMAL);
@@ -215,10 +217,7 @@ static void center_curline(void) {
 
 static void handle_goto(void) {
 	char buf[16]; char * ptr; unsigned int pos;
-#define GOTO_PROMPT "Go to line:"
-	mvprintw(height-1, 0, GOTO_PROMPT);
-	echo(); mvgetnstr(height-1, sizeof(GOTO_PROMPT), buf, sizeof(buf)); 
-	noecho(); clear_lastline();
+	PROMPT("Go to line:", buf);
 	pos = strtoul(buf, &ptr, 10);
 	if (ptr > buf) {
 		unsigned int curpos = y + offset;
@@ -320,7 +319,6 @@ static wchar_t query(const wchar_t * question, const wchar_t * answers) {
 	return a;
 }
 
-
 static void save_to_file(int warn_if_exists) {
 	FILE * f;
 	size_t size = 0;
@@ -368,6 +366,33 @@ static void save_file_as(void) {
 	else free(oldfname);
 }
 
+static void free_list(line_t * l) {
+	if (l) { free(l->text); free_list(l->next); free(l); }
+}
+
+static void open_file(void) {
+	line_t * old_file = cur;
+	char * old_fname = fname;
+	char buf[256];
+	if (file_modified) {
+		wchar_t a = query(L"Save file (y/n/c)?", L"ync");
+		switch (a) {
+		case L'y': save_to_file(fname==NULL); /* fall-through */
+		case L'n': break;
+		case L'c': return;
+		}
+	}
+	PROMPT("Open file:", buf);
+	load_file(buf);
+	if (!cur) {
+		mvprintw(height-1, 0, "Error: couldn't open '%s'.", buf);
+		free(fname); cur = old_file; fname = old_fname;
+	} else {
+		file_modified = offset = lx = x = y = 0;
+		free_list(find_first(old_file)); free(old_fname);
+	}
+}
+
 static void kill_to_eol(void) {
 	if (lx == cur->usize) merge_next_line();
 	else cur->usize = lx;
@@ -410,7 +435,7 @@ static void handle_tab(void) { insert_char(key); lx++; x+=TABWIDTH; }
 static void handle_other_key(wint_t key) { insert_char(key); incr_x(); }
 
 static void version(void) {
-	wprintf(L"%s %s\n", NAME, VERSION); exit(EXIT_SUCCESS);
+	wprintf(L"%s\n", NAME_VERSION); exit(EXIT_SUCCESS);
 }
 
 static void usage(const char * argv0) {
@@ -438,6 +463,7 @@ static struct {
 	{ kill_to_eol,      "^K", 0             },
 	{ tabula_rasa,      "^L", 0             },
 	{ handle_enter,     "^M", 0             },
+	{ open_file,        "^O", 0             },
 	{ save_to_file_0,   "^S", 0             },
 	{ goto_top,         "^T", 0             },
 	{ save_file_as,     "^W", 0             },
@@ -467,7 +493,6 @@ int main(int argc, char * argv[]) {
 			usage(argv[0]);
 	}
 
-
 	initscr(); raw(); noecho(); nonl(); keypad(stdscr, TRUE);
 	lx = offset = y = x = 0;
 	getmaxyx(stdscr, height, width);
@@ -481,7 +506,6 @@ init_empty_buf:
 		cur->prev = NULL;
 		cur->next = NULL;
 	}
-
 begin_loop:
 	while (!quit_loop) {
 		unsigned int i;
@@ -491,13 +515,12 @@ begin_loop:
 		if (ERR == rc) continue;
 		kn = key_name(key);
 		for (i=0;funcs[i].func != NULL;++i) {
-			if ((kn!=NULL && funcs[i].keyname!=NULL && strcmp(kn,funcs[i].keyname)==0) ||
+			if ((kn!=NULL && funcs[i].keyname!=NULL && !strcmp(kn,funcs[i].keyname)) ||
 				(key != 0 && funcs[i].key!=0 && funcs[i].key==key)) {
 				funcs[i].func(); goto begin_loop;
 			}
 		}
 		if (key >= L' ' && rc != KEY_CODE_YES) handle_other_key(key);
 	}
-
 	noraw(); endwin(); return 0;
 }
