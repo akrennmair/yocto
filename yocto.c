@@ -324,11 +324,8 @@ static void save_to_file(int warn_if_exists) {
 	size_t size = 0;
 	if (fname == NULL) {
 		char buf[256];
-#define SAVE_PROMPT "Save to file:"
 read_filename:
-		mvprintw(height-1, 0, SAVE_PROMPT);
-		echo(); mvgetnstr(height-1, sizeof(SAVE_PROMPT), buf, sizeof(buf));
-		noecho(); clear_lastline();
+		PROMPT("Save to file:", buf);
 		if (strlen(buf)>0) {
 			if (warn_if_exists) {
 				struct stat st;
