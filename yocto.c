@@ -96,9 +96,10 @@ static size_t print_line(unsigned int yc, const wchar_t * text, size_t len) {
 static line_t * create_line(const wchar_t * text, unsigned int textlen) {
 	line_t * l = malloc(sizeof(line_t));
 	unsigned int len = text ? textlen : 0;
-	l->text = malloc(len * sizeof(wchar_t));
+	l->text = malloc((len ? len : 1 ) * sizeof(wchar_t));
 	if (text) wmemcpy(l->text, text, len);
-	l->usize = l->asize = len;
+	l->usize = len;
+	l->asize = (len ? len : 1);
 	return l;
 }
 
@@ -178,7 +179,7 @@ static void resize_line(line_t * l, size_t size) {
 
 static void insert_char(wint_t key) {
 	resize_line(cur, cur->usize + 1);
-	wmemmove(cur->text + lx + 1, cur->text + lx, cur->usize - lx);
+	wmemmove(cur->text + lx + 1, cur->text + lx, cur->usize - lx - 1);
 	cur->text[lx] = (wchar_t)key;
 	file_modified = 1;
 }
@@ -254,7 +255,7 @@ static void handle_del(void) {
 }
 
 static void handle_backspace(void) {
-	if (x > 0) {
+	if (lx > 0) {
 		decr_x();
 		wmemmove(cur->text + lx, cur->text + lx + 1, cur->usize - lx - 1);
 		cur->usize--;
@@ -490,6 +491,7 @@ begin_loop:
 		clear_lastline();
 		if (ERR == rc) continue;
 		kn = key_name(key);
+		/* fprintf(stderr, "key = %d (%lc) key_name = %s\n", key, (wchar_t)key, kn); */
 		for (i=0;funcs[i].func != NULL;++i) {
 			if ((kn!=NULL && funcs[i].keyname!=NULL && strcmp(kn,funcs[i].keyname)==0) ||
 				(key != 0 && funcs[i].key!=0 && funcs[i].key==key)) {

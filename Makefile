@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-O2 -Wall -std=c99
+CFLAGS=-O2 -std=c99
 LIBS=-lncursesw
 LDFLAGS=
 OBJS=$(patsubst %.c,%.o,$(wildcard *.c))
