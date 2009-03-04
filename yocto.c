@@ -48,9 +48,9 @@ static line_t * find_first(line_t * l) {
 
 static size_t compute_width(const wchar_t * text, size_t len) {
 	size_t rv = 0;
-	for (unsigned i=0;i<len;i++) {
-		if (text[i] == L'\t') rv += TABWIDTH;
-		else rv += wcwidth(text[i]);
+	for (;len > 0;++text,--len) {
+		if (*text == L'\t') rv += TABWIDTH;
+		else rv += wcwidth(*text);
 	}
 	return rv;
 }
@@ -74,18 +74,15 @@ static void align_x(void) {
 
 static void correct_x(void) {
 	if (lx > cur->usize || x > compute_width(cur->text, cur->usize)) {
-		x = compute_width(cur->text, (lx = cur->usize));
-	} else {
-		align_x();
-	}
+		goto_eol();
+	} else align_x();
 }
 
 static size_t print_line(unsigned int yc, const wchar_t * text, size_t len) {
 	size_t col = 0;
 	for (unsigned int i=0;i<len && col<width;i++) {
 		if (text[i] == '\t') {
-			for (unsigned int j=0;j<TABWIDTH;j++)
-				mvaddwstr(yc, col+j, L" ");
+			mvprintw(yc, col, "%*s", TABWIDTH, "");
 			col += TABWIDTH;
 		} else {
 			mvaddnwstr(yc, col, text + i, 1);
@@ -431,13 +428,11 @@ static void handle_tab(void) { insert_char(key); lx++; x+=TABWIDTH; }
 
 static void handle_other_key(wint_t key) { insert_char(key); incr_x(); }
 
-static void version(void) {
-	wprintf(L"%s\n", NAME_VERSION); exit(EXIT_SUCCESS);
-}
+static void version(void) { wprintf(L"%s\n", NAME_VERSION); exit(1); }
 
 static void usage(const char * argv0) {
 	wprintf(L"%s: usage: %s [--help|--version|<filename>]\n", argv0, argv0);
-	exit(EXIT_SUCCESS);
+	exit(1);
 }
 
 static void tabula_rasa(void) {
