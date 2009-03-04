@@ -27,6 +27,7 @@ and you think this stuff is worth it, you can buy me a beer in return.
 #define PROMPT(pr,buf) do { mvprintw(height-1, 0, (pr)); echo(); \
 	mvgetnstr(height-1, sizeof(pr), buf, sizeof(buf)); noecho(); \
 	clear_lastline(); } while(0)
+#define CUR cb->cur
 
 typedef struct line {
 	struct line * prev, * next; /* previous line, next line */
@@ -34,12 +35,18 @@ typedef struct line {
 	unsigned int asize, usize; /* allocated size, used size */
 } line_t;
 
-static line_t * cur = NULL;
-static unsigned int width, height, lx, x, y, offset;
-static char * fname = NULL;
-static int file_modified = 0;
+typedef struct buf {
+	line_t * cur;
+	unsigned int lx, x, y, offset;
+	int file_modified;
+	char * fname;
+	struct buf * next, * prev;
+} buf_t;
+
+static unsigned int width, height;
 static int quit_loop = 0;
 static wint_t key;
+static buf_t * cb;
 
 static line_t * find_first(line_t * l) {
 	while (l->prev != NULL) l = l->prev;
@@ -55,25 +62,26 @@ static size_t compute_width(const wchar_t * text, size_t len) {
 	return rv;
 }
 
-static void goto_bol(void) { lx = x = 0; }
+static void goto_bol(void) { cb->lx = cb->x = 0; }
 
 static void goto_eol(void) {
-	x = compute_width(cur->text, (lx = cur->usize));
+	cb->x = compute_width(CUR->text, 
+		(cb->lx = CUR->usize));
 }
 
 static void align_x(void) {
 	unsigned int newx = 0;
 	unsigned int i;
-	for (i=0;i<cur->usize;i++) {
-		if (cur->text[i] == '\t') newx += TABWIDTH;
-		else newx += wcwidth(cur->text[i]);
-		if (newx > x) break;
+	for (i=0;i<CUR->usize;i++) {
+		if (CUR->text[i] == '\t') newx += TABWIDTH;
+		else newx += wcwidth(CUR->text[i]);
+		if (newx > cb->x) break;
 	}
-	x = compute_width(cur->text, (lx = i));
+	cb->x = compute_width(CUR->text, (cb->lx = i));
 }
 
 static void correct_x(void) {
-	if (lx > cur->usize || x > compute_width(cur->text, cur->usize)) {
+	if (cb->lx > CUR->usize || cb->x > compute_width(CUR->text, CUR->usize)) {
 		goto_eol();
 	} else align_x();
 }
@@ -102,54 +110,54 @@ static line_t * create_line(const wchar_t * text, unsigned int textlen) {
 }
 
 static inline void clear_lastline(void) {
-	move(height-1, 0); clrtoeol(); move(y, x);
+	move(height-1, 0); clrtoeol(); move(cb->y, cb->x);
 }
 
 static inline void incr_y(void) {
-	if (y < height-3) y++;
-	else offset++;
+	if (cb->y < height-3) cb->y++;
+	else cb->offset++;
 }
 
 static inline void decr_y(void) {
-	if (y > 0) y--;
-	else offset--;
+	if (cb->y > 0) cb->y--;
+	else cb->offset--;
 }
 
 static inline void incr_x(void) {
-	if (lx < cur->usize && x < width-1) {
-		if (cur->text[lx] == L'\t') x += TABWIDTH;
-		else x += wcwidth(cur->text[lx]);
-		lx++;
+	if (cb->lx < CUR->usize && cb->x < width-1) {
+		if (CUR->text[cb->lx] == L'\t') cb->x += TABWIDTH;
+		else cb->x += wcwidth(CUR->text[cb->lx]);
+		cb->lx++;
 	}
 }
 
 static inline void decr_x(void) {
-	if (lx > 0) {
-		lx--;
-		if (cur->text[lx] == L'\t') x -= TABWIDTH;
-		else x -= wcwidth(cur->text[lx]);
+	if (cb->lx > 0) {
+		cb->lx--;
+		if (CUR->text[cb->lx] == L'\t') cb->x -= TABWIDTH;
+		else cb->x -= wcwidth(CUR->text[cb->lx]);
 	}
 }
 
 static void redraw_screen() {
 	int i;
-	line_t * tmp = cur->prev;
+	line_t * tmp = CUR->prev;
 	attrset(A_REVERSE);
 	mvprintw(height-2, 0, "%*s", width, "");
 	mvprintw(height-2, 0, "[" NAME_VERSION "] %s %s [%u|%u-%u]",
-		file_modified ? "*" : "-", fname ? fname : "<no file>",
-		offset + y + 1, lx + 1, x + 1);
+		cb->file_modified ? "*" : "-", cb->fname ? cb->fname : "<no file>",
+		cb->offset + cb->y + 1, cb->lx + 1, cb->x + 1);
 	attrset(A_NORMAL);
-	if (y > 0) {
-		for (i=y-1;i>=0 && tmp!=NULL;i--,tmp=tmp->prev) {
+	if (cb->y > 0) {
+		for (i=cb->y-1;i>=0 && tmp!=NULL;i--,tmp=tmp->prev) {
 			clrline(i); print_line(i, tmp->text, tmp->usize);
 		}
 	}
-	tmp = cur;
-	for (i=y;i<(int)height-2 && tmp!=NULL;i++,tmp=tmp->next) {
+	tmp = CUR;
+	for (i=cb->y;i<(int)height-2 && tmp!=NULL;i++,tmp=tmp->next) {
 		int attr = A_NORMAL;
 		clrline(i);
-		if (i==(int)y) attr = A_UNDERLINE;
+		if (i==(int)cb->y) attr = A_UNDERLINE;
 		attrset(attr);
 		if (compute_width(tmp->text, tmp->usize) > width) {
 			print_line(i, tmp->text, tmp->usize);
@@ -164,7 +172,7 @@ static void redraw_screen() {
 	for (;i<(int)height-2;i++) {
 		clrline(i); mvaddwstr(i, 0, L"~");
 	}
-	attrset(A_NORMAL); move(y, x); refresh();
+	attrset(A_NORMAL); move(cb->y, cb->x); refresh();
 }
 
 static void resize_line(line_t * l, size_t size) {
@@ -176,31 +184,31 @@ static void resize_line(line_t * l, size_t size) {
 }
 
 static void insert_char(wint_t key) {
-	resize_line(cur, cur->usize + 1);
-	wmemmove(cur->text + lx + 1, cur->text + lx, cur->usize - lx);
-	cur->text[lx] = (wchar_t)key;
-	file_modified = 1;
+	resize_line(CUR, CUR->usize + 1);
+	wmemmove(CUR->text + cb->lx + 1, CUR->text + cb->lx, CUR->usize - cb->lx - 1);
+	CUR->text[cb->lx] = (wchar_t)key;
+	cb->file_modified = 1;
 }
 
 static void handle_enter() {
 	line_t * l;
-	l = create_line(cur->text + x, cur->usize - lx);
-	cur->usize = x;
-	if (cur->next) cur->next->prev = l;
-	l->next = cur->next; l->prev = cur;
-	cur->next = l; cur = cur->next;
-	incr_y(); lx = x = 0;
-	file_modified = 1;
+	l = create_line(CUR->text + cb->x, CUR->usize - cb->lx);
+	CUR->usize = cb->x;
+	if (CUR->next) CUR->next->prev = l;
+	l->next = CUR->next; l->prev = CUR;
+	CUR->next = l; CUR = CUR->next;
+	incr_y(); cb->lx = cb->x = 0;
+	cb->file_modified = 1;
 }
 
 static void merge_next_line(void) {
-	if (cur->next) {
-		line_t * n = cur->next;
-		size_t oldsize = cur->usize;
-		resize_line(cur, cur->usize + n->usize);
-		wmemmove(cur->text + oldsize, n->text, n->usize);
-		if (n->next) n->next->prev = cur;
-		cur->next = n->next;
+	if (CUR->next) {
+		line_t * n = CUR->next;
+		size_t oldsize = CUR->usize;
+		resize_line(CUR, CUR->usize + n->usize);
+		wmemmove(CUR->text + oldsize, n->text, n->usize);
+		if (n->next) n->next->prev = CUR;
+		CUR->next = n->next;
 		free(n->text);
 		free(n);
 	}
@@ -208,8 +216,8 @@ static void merge_next_line(void) {
 
 static void center_curline(void) {
 	unsigned int middle = (height-3)/2;
-	while (y > middle) { decr_y(); offset++; }
-	while (y < middle && offset > 0) { incr_y(); offset--; }
+	while (cb->y > middle) { decr_y(); cb->offset++; }
+	while (cb->y < middle && cb->offset > 0) { incr_y(); cb->offset--; }
 }
 
 static void handle_goto(void) {
@@ -217,8 +225,8 @@ static void handle_goto(void) {
 	PROMPT("Go to line:", buf);
 	pos = strtoul(buf, &ptr, 10);
 	if (ptr > buf) {
-		unsigned int curpos = y + offset;
-		line_t * l = cur;
+		unsigned int curpos = cb->y + cb->offset;
+		line_t * l = CUR;
 		int tmp = 0;
 		if (pos < 1) {
 			mvaddwstr(height-1, 0, L"Line number too small."); return;
@@ -236,54 +244,54 @@ static void handle_goto(void) {
 		if (l) {
 			while (tmp > 0) { incr_y(); tmp--; }
 			while (tmp < 0) { decr_y(); tmp++; }
-			cur = l; center_curline();
+			CUR = l; center_curline();
 		} else mvaddwstr(height-1, 0, L"Line number too large.");
 	}
 }
 
 static void handle_del(void) {
-	if (lx < cur->usize) {
-		wmemmove(cur->text + lx, cur->text + lx + 1, cur->usize - lx - 1);
-		cur->usize--;
+	if (cb->lx < CUR->usize) {
+		wmemmove(CUR->text + cb->lx, CUR->text + cb->lx + 1, CUR->usize - cb->lx - 1);
+		CUR->usize--;
 	} else merge_next_line();
-	file_modified = 1;
+	cb->file_modified = 1;
 }
 
 static void handle_backspace(void) {
-	if (x > 0) {
+	if (cb->x > 0) {
 		decr_x();
-		wmemmove(cur->text + lx, cur->text + lx + 1, cur->usize - lx - 1);
-		cur->usize--;
-	} else if (cur->prev) {
+		wmemmove(CUR->text + cb->lx, CUR->text + cb->lx + 1, CUR->usize - cb->lx - 1);
+		CUR->usize--;
+	} else if (CUR->prev) {
 		size_t oldsize;
-		cur = cur->prev; oldsize = cur->usize;
+		CUR = CUR->prev; oldsize = CUR->usize;
 		merge_next_line(); decr_y();
-		x = compute_width(cur->text, (lx = oldsize));
+		cb->x = compute_width(CUR->text, (cb->lx = oldsize));
 	}
-	file_modified = 1;
+	cb->file_modified = 1;
 }
 
 static void goto_nextpage(void) {
-	for (unsigned int i=0;i<height-3 && cur->next!=NULL;i++,cur=cur->next) 
+	for (unsigned int i=0;i<height-3 && CUR->next!=NULL;i++,CUR=CUR->next) 
 		incr_y();
 	correct_x();
 }
 
 static void goto_prevpage(void) {
-	for (unsigned int i=0;i<height-3 && cur->prev!=NULL;i++,cur=cur->prev)
+	for (unsigned int i=0;i<height-3 && CUR->prev!=NULL;i++,CUR=CUR->prev)
 		decr_y();
 	correct_x();
 }
 
 static void load_file(char * filename) {
 	FILE * f; line_t * l; wchar_t buf[1024];
-	fname = strdup(filename);
-	if ((f=fopen(fname, "r"))==NULL) {
-		mvprintw(height-1, 0, "New file: %s", fname);
-		cur = NULL;
+	cb->fname = strdup(filename);
+	if ((f=fopen(cb->fname, "r"))==NULL) {
+		mvprintw(height-1, 0, "New file: %s", cb->fname);
+		CUR = NULL;
 		return;
 	}
-	fwide(f, 1); cur = NULL;
+	fwide(f, 1); CUR = NULL;
 	while (!feof(f)) {
 		fgetws(buf, sizeof(buf)/sizeof(*buf), f);
 		if (!feof(f)) {
@@ -292,17 +300,17 @@ static void load_file(char * filename) {
 				buf[len-1] = L'\0'; len--;
 			}
 			l = create_line(buf, len);
-			if (cur) {
-				l->next = cur->next; l->prev = cur;
-				cur->next = l; cur = cur->next;
+			if (CUR) {
+				l->next = CUR->next; l->prev = CUR;
+				CUR->next = l; CUR = CUR->next;
 			} else {
 				l->prev = l->next = NULL;
-				cur = l;
+				CUR = l;
 			}
 		}
 	}
 	fclose(f);
-	if (cur) cur = find_first(cur);
+	if (CUR) CUR = find_first(CUR);
 }
 
 static wchar_t query(const wchar_t * question, const wchar_t * answers) {
@@ -319,7 +327,7 @@ static wchar_t query(const wchar_t * question, const wchar_t * answers) {
 static void save_to_file(int warn_if_exists) {
 	FILE * f;
 	size_t size = 0;
-	if (fname == NULL) {
+	if (cb->fname == NULL) {
 		char buf[256];
 read_filename:
 		PROMPT("Save to file:", buf);
@@ -330,33 +338,33 @@ read_filename:
 				query(L"File exists. Overwrite (y/n)?", L"yn")==L'n')
 						goto read_filename;
 			}
-			fname = strdup(buf);
+			cb->fname = strdup(buf);
 		} else {
 			mvaddwstr(height-1, 0, L"Aborted saving.");
 			return;
 		}
 	}
-	if ((f=fopen(fname, "w"))==NULL) {
-		mvprintw(height-1, 0, "Error: couldn't open '%s' for writing.", fname);
+	if ((f=fopen(cb->fname, "w"))==NULL) {
+		mvprintw(height-1, 0, "Error: couldn't open '%s' for writing.", cb->fname);
 		return;
 	}
 	fwide(f, 1);
-	for (line_t * l = find_first(cur);l!=NULL;l=l->next) {
+	for (line_t * l = find_first(CUR);l!=NULL;l=l->next) {
 		unsigned int i;
 		for (i=0;i<l->usize;i++) fputwc(l->text[i], f);
 		fputwc(L'\n', f);
 		size += l->usize + 1;
 	}
-	fclose(f); mvprintw(height-1, 0, "Wrote '%s' (%u bytes).", fname, size);
-	file_modified = 0;
+	fclose(f); mvprintw(height-1, 0, "Wrote '%s' (%u bytes).", cb->fname, size);
+	cb->file_modified = 0;
 }
 
 static void save_to_file_0(void) { save_to_file(0); }
 
 static void save_file_as(void) {
-	char * oldfname = fname; fname = NULL;
+	char * oldfname = cb->fname; cb->fname = NULL;
 	save_to_file(1);
-	if (NULL == fname) fname = oldfname;
+	if (NULL == cb->fname) cb->fname = oldfname;
 	else free(oldfname);
 }
 
@@ -365,66 +373,50 @@ static void free_list(line_t * l) {
 }
 
 static void open_file(void) {
-	line_t * old_file = cur;
-	char * old_fname = fname;
+	buf_t * newbuf = calloc(1, sizeof(buf_t));
 	char buf[256];
-	if (file_modified) {
-		wchar_t a = query(L"Save file (y/n/c)?", L"ync");
-		switch (a) {
-		case L'y': save_to_file(fname==NULL); /* fall-through */
-		case L'n': break;
-		case L'c': return;
-		}
-	}
+	newbuf->next = cb->next; newbuf->prev = cb;
+	newbuf->next->prev = newbuf; newbuf->prev->next = newbuf;
+	cb = cb->next;
 	PROMPT("Open file:", buf);
 	load_file(buf);
-	if (!cur) {
+	if (!CUR) {
 		mvprintw(height-1, 0, "Error: couldn't open '%s'.", buf);
-		free(fname); cur = old_file; fname = old_fname;
+		cb = newbuf->prev; newbuf->prev->next = newbuf->next;
+		newbuf->next->prev = newbuf->prev; free(newbuf->fname); free(newbuf);
 	} else {
-		file_modified = offset = lx = x = y = 0;
-		free_list(find_first(old_file)); free(old_fname);
+		cb->file_modified = cb->offset = cb->lx = cb->x = cb->y = 0;
 	}
 }
 
 static void kill_to_eol(void) {
-	if (lx == cur->usize) merge_next_line();
-	else cur->usize = lx;
-	file_modified = 1;
+	if (cb->lx == CUR->usize) merge_next_line();
+	else CUR->usize = cb->lx;
+	cb->file_modified = 1;
 }
 
-static void do_exit(void) {
-	if (file_modified) {
-		wchar_t a = query(L"Save file (y/n/c)?", L"ync");
-		switch (a) {
-		case L'y': save_to_file(fname==NULL); /* fall-through */
-		case L'n': quit_loop = 1; break;
-		case L'c': break;
-		}
-	} else quit_loop = 1;
-}
 
 static void do_cancel(void) {
 	quit_loop = 1;
 }
 
 static void goto_bottom(void) {
-	while (y < height-3 && offset > 0) {
-		incr_y(); offset--;
+	while (cb->y < height-3 && cb->offset > 0) {
+		incr_y(); cb->offset--;
 	}
 }
 
-static void goto_top(void) { while (y > 0) { decr_y(); offset++; } }
+static void goto_top(void) { while (cb->y > 0) { decr_y(); cb->offset++; } }
 
 static void handle_keyup(void) {
-	if (cur->prev) { cur = cur->prev; decr_y(); correct_x(); }
+	if (CUR->prev) { CUR = CUR->prev; decr_y(); correct_x(); }
 }
 
 static void handle_keydown(void) {
-	if (cur->next) { cur = cur->next; incr_y(); correct_x(); }
+	if (CUR->next) { CUR= CUR->next; incr_y(); correct_x(); }
 }
 
-static void handle_tab(void) { insert_char(key); lx++; x+=TABWIDTH; }
+static void handle_tab(void) { insert_char(key); cb->lx++; cb->x+=TABWIDTH; }
 
 static void handle_other_key(wint_t key) { insert_char(key); incr_x(); }
 
@@ -435,12 +427,32 @@ static void usage(const char * argv0) {
 	exit(1);
 }
 
+static void next_buf(void) { cb = cb->next; }
+static void prev_buf(void) { cb = cb->prev; }
+
 static void tabula_rasa(void) {
 	noraw(); endwin();
 	initscr(); raw(); noecho(); nonl(); keypad(stdscr, TRUE);
 	getmaxyx(stdscr, height, width);
 	for (unsigned int i=0;i<height;i++) clrline(i);
 	refresh();
+}
+
+static void do_exit(void) {
+	buf_t * b = cb;
+	quit_loop = 1;
+	do {
+		if (cb->file_modified) {
+			redraw_screen();
+			wchar_t a = query(L"Save file (y/n/c)?", L"ync");
+			switch (a) {
+			case L'y': save_to_file(cb->fname==NULL); /* fall-through */
+			case L'n': break;
+			case L'c': quit_loop = 0; break;
+			}
+		}
+		if (quit_loop) next_buf();
+	} while (b != cb && quit_loop);
 }
 
 static struct {
@@ -455,7 +467,9 @@ static struct {
 	{ kill_to_eol,      "^K", 0             },
 	{ tabula_rasa,      "^L", 0             },
 	{ handle_enter,     "^M", 0             },
+	{ next_buf,         "^N", 0             },
 	{ open_file,        "^O", 0             },
+	{ prev_buf,         "^P", 0             },
 	{ save_to_file_0,   "^S", 0             },
 	{ goto_top,         "^T", 0             },
 	{ save_file_as,     "^W", 0             },
@@ -486,17 +500,18 @@ int main(int argc, char * argv[]) {
 	}
 
 	initscr(); raw(); noecho(); nonl(); keypad(stdscr, TRUE);
-	lx = offset = y = x = 0;
+	cb= calloc(1, sizeof(buf_t));
+	cb->next = cb->prev = cb;
 	getmaxyx(stdscr, height, width);
 
 	if (argc > 1) {
 		load_file(argv[1]);
-		if (cur == NULL) goto init_empty_buf;
+		if (CUR == NULL) goto init_empty_buf;
 	} else {
 init_empty_buf:
-		cur = create_line(L"", 0);
-		cur->prev = NULL;
-		cur->next = NULL;
+		CUR = create_line(L"", 0);
+		CUR->prev = NULL;
+		CUR->next = NULL;
 	}
 begin_loop:
 	while (!quit_loop) {
