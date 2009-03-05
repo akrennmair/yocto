@@ -27,6 +27,7 @@ and you think this stuff is worth it, you can buy me a beer in return.
 #define PROMPT(pr,buf) do { mvprintw(height-1, 0, (pr)); echo(); \
 	mvgetnstr(height-1, sizeof(pr), buf, sizeof(buf)); noecho(); \
 	clear_lastline(); } while(0)
+#define CTRL(x) ((x)-L'@')
 #define CUR cb->cur
 
 typedef struct line {
@@ -284,7 +285,7 @@ static void goto_prevpage(void) {
 }
 
 static void load_file(char * filename) {
-	FILE * f; line_t * l; wchar_t buf[1024];
+	FILE * f; line_t * l, * first = NULL; wchar_t buf[1024];
 	cb->fname = strdup(filename);
 	if ((f=fopen(cb->fname, "r"))==NULL) {
 		mvprintw(height-1, 0, "New file: %s", cb->fname);
@@ -305,12 +306,12 @@ static void load_file(char * filename) {
 				CUR->next = l; CUR = CUR->next;
 			} else {
 				l->prev = l->next = NULL;
-				CUR = l;
+				first = CUR = l;
 			}
 		}
 	}
 	fclose(f);
-	if (CUR) CUR = find_first(CUR);
+	if (CUR) CUR = first;
 }
 
 static wchar_t query(const wchar_t * question, const wchar_t * answers) {
@@ -456,34 +457,22 @@ static void do_exit(void) {
 }
 
 static struct {
-	void (*func)(void); const char * keyname; wint_t key;
+	void (*func)(void); wint_t key;
 } funcs[] = {
-	{ goto_bol,         "^A", 0             },
-	{ goto_bottom,      "^B", 0             },
-	{ do_cancel,        "^C", 0             },
-	{ handle_del,       "^D", KEY_DC        },
-	{ goto_eol,         "^E", 0             },
-	{ handle_goto,      "^G", 0             },
-	{ kill_to_eol,      "^K", 0             },
-	{ tabula_rasa,      "^L", 0             },
-	{ handle_enter,     "^M", 0             },
-	{ next_buf,         "^N", 0             },
-	{ open_file,        "^O", 0             },
-	{ prev_buf,         "^P", 0             },
-	{ save_to_file_0,   "^S", 0             },
-	{ goto_top,         "^T", 0             },
-	{ save_file_as,     "^W", 0             },
-	{ do_exit,          "^X", 0             },
-	{ center_curline,   "^Z", 0             },
-	{ handle_backspace, NULL, KEY_BACKSPACE },
-	{ decr_x,           NULL, KEY_LEFT      },
-	{ incr_x,           NULL, KEY_RIGHT     },
-	{ handle_keydown,   NULL, KEY_DOWN      },
-	{ handle_keyup,     NULL, KEY_UP        },
-	{ handle_tab,       NULL, L'\t'         },
-	{ goto_nextpage,    NULL, KEY_NPAGE     },
-	{ goto_prevpage,    NULL, KEY_PPAGE     },
-	{ NULL,             NULL, 0             }
+	{ goto_bol, CTRL(L'A') }, { goto_bottom, CTRL(L'B') },
+	{ do_cancel, CTRL(L'C') }, { handle_del, CTRL(L'D') },
+	{ goto_eol, CTRL(L'E') }, { handle_goto, CTRL(L'G') },
+	{ kill_to_eol, CTRL(L'K') }, { tabula_rasa, CTRL(L'L') },
+	{ handle_enter, CTRL(L'M') }, { next_buf, CTRL(L'N') },
+	{ open_file, CTRL(L'O') }, { prev_buf, CTRL(L'P') },
+	{ save_to_file_0, CTRL(L'S') }, { goto_top, CTRL(L'T') },
+	{ save_file_as, CTRL(L'W') }, { do_exit, CTRL(L'X') },
+	{ center_curline, CTRL(L'Z') }, { handle_backspace, KEY_BACKSPACE },
+	{ handle_del, KEY_DC }, { decr_x, KEY_LEFT },
+	{ incr_x, KEY_RIGHT }, { handle_keydown, KEY_DOWN },
+	{ handle_keyup, KEY_UP }, { handle_tab, L'\t' },
+	{ goto_nextpage, KEY_NPAGE }, { goto_prevpage, KEY_PPAGE },
+	{ NULL, 0 }
 };
 
 int main(int argc, char * argv[]) {
@@ -522,8 +511,7 @@ begin_loop:
 		if (ERR == rc) continue;
 		kn = key_name(key);
 		for (i=0;funcs[i].func != NULL;++i) {
-			if ((kn!=NULL && funcs[i].keyname!=NULL && !strcmp(kn,funcs[i].keyname)) ||
-				(key != 0 && funcs[i].key!=0 && funcs[i].key==key)) {
+			if (key != 0 && funcs[i].key!=0 && funcs[i].key==key) {
 				funcs[i].func(); goto begin_loop;
 			}
 		}
