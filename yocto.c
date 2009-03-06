@@ -31,24 +31,16 @@ and you think this stuff is worth it, you can buy me a beer in return.
 #define CUR cb->cur
 
 typedef struct line {
-	struct line * prev, * next; /* previous line, next line */
-	wchar_t * text;
-	unsigned int asize, usize; /* allocated size, used size */
+	struct line * prev, * next; wchar_t * text; unsigned int asize, usize;
 } line_t;
 
 typedef struct buf {
-	line_t * cur;
-	unsigned int lx, x, y, offset;
-	int file_modified;
-	char * fname;
-	struct buf * next, * prev;
+	line_t * cur; unsigned int lx, x, y, offset; int file_modified;
+	char * fname; struct buf * next, * prev;
 } buf_t;
 
-static unsigned int width, height;
-static int quit_loop = 0;
-static wint_t key;
-static buf_t * cb = NULL;
-line_t * pastebuf = NULL;
+static unsigned int width, height, quit_loop=0;
+static wint_t key; static buf_t * cb = NULL; line_t * pastebuf = NULL;
 
 static line_t * find_first(line_t * l) {
 	while (l->prev != NULL) l = l->prev; return l;
@@ -424,9 +416,7 @@ static void handle_keydown(void) {
 }
 
 static void handle_tab(void) { insert_char(key); cb->lx++; cb->x+=TABWIDTH; }
-
 static void handle_other_key(wint_t key) { insert_char(key); incr_x(); }
-
 static void version(void) { wprintf(L"%s\n", NAME_VERSION); exit(1); }
 
 static void usage(const char * argv0) {
@@ -438,8 +428,7 @@ static void next_buf(void) { cb = cb->next; }
 static void prev_buf(void) { cb = cb->prev; }
 
 static void tabula_rasa(void) {
-	noraw(); endwin();
-	initscr(); raw(); noecho(); nonl(); keypad(stdscr, TRUE);
+	noraw();endwin();initscr();raw();noecho();nonl();keypad(stdscr, TRUE);
 	getmaxyx(stdscr, height, width);
 	for (unsigned int i=0;i<height;i++) clrline(i);
 	refresh();
@@ -450,9 +439,8 @@ static void do_exit(void) {
 	do {
 		if (cb->file_modified) {
 			redraw_screen();
-			wchar_t a = query(L"Save file (y/n/c)?", L"ync");
-			switch (a) {
-			case L'y': save_to_file(cb->fname==NULL); /* fall-through */
+			switch (query(L"Save file (y/n/c)?", L"ync")) {
+			case L'y': save_to_file(cb->fname==NULL);
 			case L'n': break;
 			case L'c': quit_loop = 0; break;
 			}
@@ -494,8 +482,7 @@ int main(int argc, char * argv[]) {
 	}
 
 	initscr(); raw(); noecho(); nonl(); keypad(stdscr, TRUE);
-	cb = calloc(1, sizeof(buf_t));
-	cb->next = cb->prev = cb;
+	cb = calloc(1, sizeof(buf_t)); cb->next = cb->prev = cb;
 	getmaxyx(stdscr, height, width);
 
 	if (argc > 1) {
@@ -503,17 +490,15 @@ int main(int argc, char * argv[]) {
 		if (CUR == NULL) goto init_empty_buf;
 	} else {
 init_empty_buf:
-		CUR = create_line(L"", 0);
-		CUR->prev = NULL; CUR->next = NULL;
+		CUR = create_line(L"", 0); CUR->prev = NULL; CUR->next = NULL;
 	}
-begin_loop:
 	while (!quit_loop) {
 		unsigned int i;
 		redraw_screen(); rc  = wget_wch(stdscr, &key); clear_lastline();
 		if (ERR == rc) continue;
 		for (i=0;funcs[i].func != NULL;++i) {
 			if (key != 0 && funcs[i].key!=0 && funcs[i].key==key) {
-				funcs[i].func(); goto begin_loop;
+				funcs[i].func(); key = 0; break;
 			}
 		}
 		if (key >= L' ' && rc != KEY_CODE_YES) handle_other_key(key);
