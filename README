@@ -2,7 +2,7 @@ README
 ======
 
 yocto is a minimalistic ncurses-based text editor for Unix-like operating
-systems.
+systems. It is smaller than pico and nano.
 
 Installation
 ------------
@@ -15,32 +15,32 @@ Keys
 ----
 
 Here's a list of available keys:
-Down          go to next line
-Up            go to previous line
-PageDown      go to next page
-PageUp        go to previous page
-Backspace     delete character left of the cursor
-DEL           delete character right of the cursor
-Return        insert new line
-Ctrl-A        go to begin of line
-Ctrl-B        move current line to bottom of screen
-Ctrl-C        copy text
-Ctrl-D        delete character right of the cursor
-Ctrl-E        go to end of line
-Ctrl-F        find text
-Ctrl-G        go to line
-Ctrl-K        delete text to end of line
-Ctrl-L        redraw screen
-Ctrl-N        go to next buffer
-Ctrl-O        open file in new buffer
-Ctrl-P        go to previous buffer
-Ctrl-Q        quit editor
-Ctrl-S        save file
-Ctrl-T        move current line to top of screen
-Ctrl-V        paste text
-Ctrl-W        save file as
-Ctrl-X        cut text
-Ctrl-Z        move current line to center of screen
+Down            go to next line
+Up              go to previous line
+PageDown        go to next page
+PageUp          go to previous page
+Backspace       delete character left of the cursor
+Return          insert new line
+Ctrl-A          go to begin of line
+Ctrl-B          move current line to bottom of screen
+Ctrl-C          copy text
+Ctrl-D, DEL     delete character right of the cursor
+Ctrl-E          go to end of line
+Ctrl-F          find text
+Ctrl-G          go to line
+Ctrl-K          delete text to end of line
+Ctrl-L          redraw screen
+Ctrl-M, RETURN  insert new line
+Ctrl-N          go to next buffer
+Ctrl-O          open file in new buffer
+Ctrl-P          go to previous buffer
+Ctrl-Q          quit editor
+Ctrl-S          save file
+Ctrl-T          move current line to top of screen
+Ctrl-V          paste text
+Ctrl-W          save file as
+Ctrl-X          cut text
+Ctrl-Z          move current line to center of screen
 
 
 Contact
