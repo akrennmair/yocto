@@ -47,14 +47,14 @@ typedef struct buf {
 static unsigned int width, height;
 static int quit_loop = 0;
 static wint_t key;
-static buf_t * cb;
+static buf_t * cb = NULL;
+line_t * pastebuf = NULL;
 
 static line_t * find_first(line_t * l) {
-	while (l->prev != NULL) l = l->prev;
-	return l;
+	while (l->prev != NULL) l = l->prev; return l;
 }
 
-static size_t compute_width(const wchar_t * text, size_t len) {
+static size_t cw(const wchar_t * text, size_t len) {
 	size_t rv = 0;
 	for (;len > 0;++text,--len) {
 		if (*text == L'\t') rv += TABWIDTH;
@@ -64,49 +64,37 @@ static size_t compute_width(const wchar_t * text, size_t len) {
 }
 
 static void goto_bol(void) { cb->lx = cb->x = 0; }
-
-static void goto_eol(void) {
-	cb->x = compute_width(CUR->text, 
-		(cb->lx = CUR->usize));
-}
+static void goto_eol(void) { cb->x = cw(CUR->text, (cb->lx = CUR->usize)); }
 
 static void align_x(void) {
-	unsigned int newx = 0;
-	unsigned int i;
+	unsigned int i, newx = 0;
 	for (i=0;i<CUR->usize;i++) {
 		if (CUR->text[i] == '\t') newx += TABWIDTH;
 		else newx += wcwidth(CUR->text[i]);
 		if (newx > cb->x) break;
 	}
-	cb->x = compute_width(CUR->text, (cb->lx = i));
+	cb->x = cw(CUR->text, (cb->lx = i));
 }
 
 static void correct_x(void) {
-	if (cb->lx > CUR->usize || cb->x > compute_width(CUR->text, CUR->usize)) {
-		goto_eol();
-	} else align_x();
+	if (cb->lx > CUR->usize || cb->x > cw(CUR->text, CUR->usize)) goto_eol();
+	else align_x();
 }
 
 static size_t print_line(unsigned int yc, const wchar_t * text, size_t len) {
 	size_t col = 0;
 	for (unsigned int i=0;i<len && col<width;i++) {
 		if (text[i] == '\t') {
-			mvprintw(yc, col, "%*s", TABWIDTH, "");
-			col += TABWIDTH;
-		} else {
-			mvaddnwstr(yc, col, text + i, 1);
-			col += wcwidth(text[i]);
-		}
+			mvprintw(yc, col, "%*s", TABWIDTH, ""); col += TABWIDTH;
+		} else { mvaddnwstr(yc, col, text + i, 1); col += wcwidth(text[i]); }
 	}
 	return col;
 }
 
 static line_t * create_line(const wchar_t * text, unsigned int textlen) {
-	line_t * l = malloc(sizeof(line_t));
-	unsigned int len = text ? textlen : 0;
+	line_t * l = malloc(sizeof(line_t)); unsigned int len = text ? textlen : 0;
 	l->text = malloc(len * sizeof(wchar_t));
-	if (text) wmemcpy(l->text, text, len);
-	l->usize = l->asize = len;
+	if (text) wmemcpy(l->text, text, len); l->usize = l->asize = len;
 	return l;
 }
 
@@ -156,11 +144,10 @@ static void redraw_screen() {
 	}
 	tmp = CUR;
 	for (i=cb->y;i<(int)height-2 && tmp!=NULL;i++,tmp=tmp->next) {
-		int attr = A_NORMAL;
-		clrline(i);
+		int attr = A_NORMAL; clrline(i);
 		if (i==(int)cb->y) attr = A_UNDERLINE;
 		attrset(attr);
-		if (compute_width(tmp->text, tmp->usize) > width) {
+		if (cw(tmp->text, tmp->usize) > width) {
 			print_line(i, tmp->text, tmp->usize);
 			attrset(attr | A_BOLD); mvaddwstr(i, width-1, L"$"); attrset(attr);
 		} else {
@@ -170,9 +157,7 @@ static void redraw_screen() {
 		attrset(A_NORMAL);
 	}
 	attrset(A_BOLD);
-	for (;i<(int)height-2;i++) {
-		clrline(i); mvaddwstr(i, 0, L"~");
-	}
+	for (;i<(int)height-2;i++) { clrline(i); mvaddwstr(i, 0, L"~"); }
 	attrset(A_NORMAL); move(cb->y, cb->x); refresh();
 }
 
@@ -186,9 +171,8 @@ static void resize_line(line_t * l, size_t size) {
 
 static void insert_char(wint_t key) {
 	resize_line(CUR, CUR->usize + 1);
-	wmemmove(CUR->text + cb->lx + 1, CUR->text + cb->lx, CUR->usize - cb->lx - 1);
-	CUR->text[cb->lx] = (wchar_t)key;
-	cb->file_modified = 1;
+	wmemmove(CUR->text+cb->lx+1, CUR->text+cb->lx, CUR->usize-cb->lx-1);
+	CUR->text[cb->lx] = (wchar_t)key; cb->file_modified = 1;
 }
 
 static void handle_enter() {
@@ -196,22 +180,17 @@ static void handle_enter() {
 	l = create_line(CUR->text + cb->x, CUR->usize - cb->lx);
 	CUR->usize = cb->x;
 	if (CUR->next) CUR->next->prev = l;
-	l->next = CUR->next; l->prev = CUR;
-	CUR->next = l; CUR = CUR->next;
-	incr_y(); cb->lx = cb->x = 0;
-	cb->file_modified = 1;
+	l->next = CUR->next; l->prev = CUR; CUR->next = l; CUR = CUR->next;
+	incr_y(); cb->lx = cb->x = 0; cb->file_modified = 1;
 }
 
 static void merge_next_line(void) {
 	if (CUR->next) {
-		line_t * n = CUR->next;
-		size_t oldsize = CUR->usize;
+		line_t * n = CUR->next; size_t oldsize = CUR->usize;
 		resize_line(CUR, CUR->usize + n->usize);
 		wmemmove(CUR->text + oldsize, n->text, n->usize);
 		if (n->next) n->next->prev = CUR;
-		CUR->next = n->next;
-		free(n->text);
-		free(n);
+		CUR->next = n->next; free(n->text); free(n);
 	}
 }
 
@@ -226,21 +205,13 @@ static void handle_goto(void) {
 	PROMPT("Go to line:", buf);
 	pos = strtoul(buf, &ptr, 10);
 	if (ptr > buf) {
-		unsigned int curpos = cb->y + cb->offset;
-		line_t * l = CUR;
-		int tmp = 0;
-		if (pos < 1) {
-			mvaddwstr(height-1, 0, L"Line number too small."); return;
-		}
+		unsigned int curpos = cb->y + cb->offset; line_t *l = CUR; int tmp = 0;
+		if (pos < 1){ mvaddwstr(height-1,0,L"Line number too small."); return;}
 		pos--;
 		if (curpos < pos) {
-			while (curpos < pos && l) {
-				l = l->next; curpos++; tmp++;
-			}
+			while (curpos < pos && l) { l = l->next; curpos++; tmp++; }
 		} else if (curpos > pos) {
-			while (curpos > pos && l) {
-				l = l->prev; curpos--; tmp--;
-			}
+			while (curpos > pos && l) { l = l->prev; curpos--; tmp--; }
 		}
 		if (l) {
 			while (tmp > 0) { incr_y(); tmp--; }
@@ -252,7 +223,7 @@ static void handle_goto(void) {
 
 static void handle_del(void) {
 	if (cb->lx < CUR->usize) {
-		wmemmove(CUR->text + cb->lx, CUR->text + cb->lx + 1, CUR->usize - cb->lx - 1);
+		wmemmove(CUR->text + cb->lx,CUR->text + cb->lx+1,CUR->usize-cb->lx-1);
 		CUR->usize--;
 	} else merge_next_line();
 	cb->file_modified = 1;
@@ -261,13 +232,12 @@ static void handle_del(void) {
 static void handle_backspace(void) {
 	if (cb->x > 0) {
 		decr_x();
-		wmemmove(CUR->text + cb->lx, CUR->text + cb->lx + 1, CUR->usize - cb->lx - 1);
+		wmemmove(CUR->text + cb->lx,CUR->text+cb->lx+1,CUR->usize-cb->lx-1);
 		CUR->usize--;
 	} else if (CUR->prev) {
-		size_t oldsize;
-		CUR = CUR->prev; oldsize = CUR->usize;
+		size_t oldsize; CUR = CUR->prev; oldsize = CUR->usize;
 		merge_next_line(); decr_y();
-		cb->x = compute_width(CUR->text, (cb->lx = oldsize));
+		cb->x = cw(CUR->text, (cb->lx = oldsize));
 	}
 	cb->file_modified = 1;
 }
@@ -289,8 +259,7 @@ static void load_file(char * filename) {
 	cb->fname = strdup(filename);
 	if ((f=fopen(cb->fname, "r"))==NULL) {
 		mvprintw(height-1, 0, "New file: %s", cb->fname);
-		CUR = NULL;
-		return;
+		CUR = NULL; return;
 	}
 	fwide(f, 1); CUR = NULL;
 	while (!feof(f)) {
@@ -304,10 +273,7 @@ static void load_file(char * filename) {
 			if (CUR) {
 				l->next = CUR->next; l->prev = CUR;
 				CUR->next = l; CUR = CUR->next;
-			} else {
-				l->prev = l->next = NULL;
-				first = CUR = l;
-			}
+			} else { l->prev = l->next = NULL; first = CUR = l; }
 		}
 	}
 	fclose(f);
@@ -315,19 +281,16 @@ static void load_file(char * filename) {
 }
 
 static wchar_t query(const wchar_t * question, const wchar_t * answers) {
-	wint_t a; int rc;
-	clear_lastline(); mvaddwstr(height-1, 0, question);
+	wint_t a; int rc; clear_lastline(); mvaddwstr(height-1, 0, question);
 	move(height-1, wcswidth(question, wcslen(question))+1);
-	do {
-		rc = wget_wch(stdscr, &a);
+	do { rc = wget_wch(stdscr, &a);
 	} while (rc == ERR || wcschr(answers, a)==NULL);
 	clear_lastline();
 	return a;
 }
 
 static void save_to_file(int warn_if_exists) {
-	FILE * f;
-	size_t size = 0;
+	FILE * f; size_t size = 0;
 	if (cb->fname == NULL) {
 		char buf[256];
 read_filename:
@@ -340,10 +303,7 @@ read_filename:
 						goto read_filename;
 			}
 			cb->fname = strdup(buf);
-		} else {
-			mvaddwstr(height-1, 0, L"Aborted saving.");
-			return;
-		}
+		} else { mvaddwstr(height-1, 0, L"Aborted saving."); return; }
 	}
 	if ((f=fopen(cb->fname, "w"))==NULL) {
 		mvprintw(height-1, 0, "Error: couldn't open '%s' for writing.", cb->fname);
@@ -370,7 +330,7 @@ static void save_file_as(void) {
 }
 
 static void free_list(line_t * l) {
-	if (l) { free(l->text); free_list(l->next); free(l); }
+	if (l) { line_t *next = l->next; free(l->text); free(l); free_list(next); }
 }
 
 static void open_file(void) {
@@ -385,20 +345,66 @@ static void open_file(void) {
 		mvprintw(height-1, 0, "Error: couldn't open '%s'.", buf);
 		cb = newbuf->prev; newbuf->prev->next = newbuf->next;
 		newbuf->next->prev = newbuf->prev; free(newbuf->fname); free(newbuf);
-	} else {
-		cb->file_modified = cb->offset = cb->lx = cb->x = cb->y = 0;
-	}
+	} else cb->file_modified = cb->offset = cb->lx = cb->x = cb->y = 0;
 }
 
 static void kill_to_eol(void) {
-	if (cb->lx == CUR->usize) merge_next_line();
-	else CUR->usize = cb->lx;
+	if (cb->lx == CUR->usize) merge_next_line(); else CUR->usize = cb->lx;
 	cb->file_modified = 1;
 }
 
+static void do_copy(void) {
+	char buf[32]; unsigned int count; char * ptr;
+	PROMPT("Copy how many lines?", buf); count = strtoul(buf, &ptr, 10);
+	if (ptr > buf && count > 0) {
+		line_t * tmp = CUR, *pastepos = NULL; unsigned int i;
+		if (pastebuf) { free_list(pastebuf); pastebuf = NULL; }
+		for (i=0;i<count && tmp;i++,tmp=tmp->next) {
+			if (!pastebuf) {
+				pastepos = pastebuf = create_line(tmp->text, tmp->usize);
+				pastepos->prev = pastepos->next = NULL;
+			} else {
+				pastepos->next = create_line(tmp->text, tmp->usize);
+				pastepos->next->prev = pastepos; pastepos = pastepos->next;
+				pastepos->next = NULL;
+			}
+		}
+		mvprintw(height-1, 0, "Copied %u lines.", i);
+	}
+}
 
-static void do_cancel(void) {
-	quit_loop = 1;
+static void do_cut(void) {
+	char buf[32]; unsigned int count; char * ptr;
+	PROMPT("Cut how many lines?", buf); count = strtoul(buf, &ptr, 10);
+	if (ptr > buf && count > 0) {
+		unsigned int i; line_t *tmp = CUR;
+		if (pastebuf) { free_list(pastebuf); pastebuf = NULL; }
+		pastebuf = tmp;
+		for (i=0;i<(count-1) && tmp;i++) tmp = tmp->next;
+		if (tmp) {
+			if (tmp->next) tmp->next->prev = CUR->prev;
+			if (CUR->prev) { CUR->prev->next = tmp->next; CUR = CUR->prev; }
+			else CUR = tmp->next;
+		} else	if (CUR->prev) { CUR->prev->next = NULL; CUR = CUR->prev; }
+				else CUR = NULL;
+		if (!CUR) CUR = create_line(L"", 0); if (tmp) tmp->next = NULL;
+		decr_y(); mvprintw(height-1, 0, "Cut %u lines.", i);
+		cb->file_modified = 1;
+	}
+}
+
+static void do_paste(void) {
+	unsigned int i=0;
+	line_t * cur = CUR;
+	for (line_t * tmp=pastebuf;tmp;tmp=tmp->next,i++) {
+		line_t * l = create_line(tmp->text, tmp->usize);
+		l->next = cur->next; l->prev = cur;
+		if (cur->next) cur->next->prev = l;
+		cur->next = l; cur = cur->next; }
+	if (i > 0) {
+		mvprintw(height-1, 0, "Pasted %u lines.", i);
+		cb->file_modified = 1; 
+	}
 }
 
 static void goto_bottom(void) {
@@ -440,8 +446,7 @@ static void tabula_rasa(void) {
 }
 
 static void do_exit(void) {
-	buf_t * b = cb;
-	quit_loop = 1;
+	buf_t * b = cb; quit_loop = 1;
 	do {
 		if (cb->file_modified) {
 			redraw_screen();
@@ -460,13 +465,14 @@ static struct {
 	void (*func)(void); wint_t key;
 } funcs[] = {
 	{ goto_bol, CTRL(L'A') }, { goto_bottom, CTRL(L'B') },
-	{ do_cancel, CTRL(L'C') }, { handle_del, CTRL(L'D') },
+	{ do_copy, CTRL(L'C') }, { handle_del, CTRL(L'D') },
 	{ goto_eol, CTRL(L'E') }, { handle_goto, CTRL(L'G') },
 	{ kill_to_eol, CTRL(L'K') }, { tabula_rasa, CTRL(L'L') },
 	{ handle_enter, CTRL(L'M') }, { next_buf, CTRL(L'N') },
 	{ open_file, CTRL(L'O') }, { prev_buf, CTRL(L'P') },
 	{ save_to_file_0, CTRL(L'S') }, { goto_top, CTRL(L'T') },
-	{ save_file_as, CTRL(L'W') }, { do_exit, CTRL(L'X') },
+	{ save_file_as, CTRL(L'W') }, { do_exit, CTRL(L'Q') },
+    { do_cut, CTRL(L'X') },  { do_paste, CTRL(L'V') },
 	{ center_curline, CTRL(L'Z') }, { handle_backspace, KEY_BACKSPACE },
 	{ handle_del, KEY_DC }, { decr_x, KEY_LEFT },
 	{ incr_x, KEY_RIGHT }, { handle_keydown, KEY_DOWN },
@@ -476,7 +482,6 @@ static struct {
 };
 
 int main(int argc, char * argv[]) {
-	char * kn;
 	int rc;
 
 	if (!setlocale(LC_ALL,"")) fprintf(stderr, "Warning: can't set locale!\n");
@@ -489,7 +494,7 @@ int main(int argc, char * argv[]) {
 	}
 
 	initscr(); raw(); noecho(); nonl(); keypad(stdscr, TRUE);
-	cb= calloc(1, sizeof(buf_t));
+	cb = calloc(1, sizeof(buf_t));
 	cb->next = cb->prev = cb;
 	getmaxyx(stdscr, height, width);
 
@@ -499,17 +504,13 @@ int main(int argc, char * argv[]) {
 	} else {
 init_empty_buf:
 		CUR = create_line(L"", 0);
-		CUR->prev = NULL;
-		CUR->next = NULL;
+		CUR->prev = NULL; CUR->next = NULL;
 	}
 begin_loop:
 	while (!quit_loop) {
 		unsigned int i;
-		redraw_screen();
-		rc  = wget_wch(stdscr, &key);
-		clear_lastline();
+		redraw_screen(); rc  = wget_wch(stdscr, &key); clear_lastline();
 		if (ERR == rc) continue;
-		kn = key_name(key);
 		for (i=0;funcs[i].func != NULL;++i) {
 			if (key != 0 && funcs[i].key!=0 && funcs[i].key==key) {
 				funcs[i].func(); goto begin_loop;

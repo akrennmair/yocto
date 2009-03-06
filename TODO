@@ -1,10 +1,9 @@
 TODO list:
-- copy/paste
-- make Ctrl-C dump out the current state to a temporary file
-
+- no open items
 
 DONE:
 - correct handling of the tab character
 - documentation
 - implement Ctrl-L
 - open file
+- copy/paste
