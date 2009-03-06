@@ -22,6 +22,7 @@ and you think this stuff is worth it, you can buy me a beer in return.
 
 #define NAME_VERSION "yocto 0.1"
 #define TABWIDTH 8
+#define MACROMAX 1024
 
 #define clrline(i) do { move(i, 0); clrtoeol(); } while(0)
 #define PROMPT(pr,buf) do { mvprintw(height-1, 0, (pr)); echo(); \
@@ -29,6 +30,7 @@ and you think this stuff is worth it, you can buy me a beer in return.
 	clear_lastline(); } while(0)
 #define CTRL(x) ((x)-L'@')
 #define CUR cb->cur
+static void handle_keystroke(wint_t key, int automatic, int rc);
 
 typedef struct line {
 	struct line * prev, * next; wchar_t * text; unsigned int asize, usize;
@@ -41,6 +43,8 @@ typedef struct buf {
 
 static unsigned int width, height, quit_loop=0;
 static wint_t key; static buf_t * cb = NULL; line_t * pastebuf = NULL;
+static wint_t macrobuf[MACROMAX];
+static unsigned int mlen = 0, recmac = 0;
 
 static line_t * find_first(line_t * l) {
 	while (l->prev != NULL) l = l->prev; return l;
@@ -472,6 +476,23 @@ static void do_exit(void) {
 	} while (b != cb && quit_loop);
 }
 
+
+
+static void start_macro(void) { 
+	mvaddwstr(height-1, 0, L"Started recording"); mlen = 0; recmac = 1; }
+
+static void stop_macro(void) { 
+	mvaddwstr(height-1, 0, L"Stopped recording"); recmac = 0; mlen--; }
+
+static void replay_macro(void) {
+	if (!recmac) {
+		for (unsigned int i=0;i<mlen;i++) {
+			handle_keystroke(macrobuf[i], 1, 0);
+		}
+		mvaddwstr(height-1, 0, L"Replayed macro");
+	} else mvaddwstr(height-1, 0, L"Can't replay macro while recording one.");
+}
+
 static struct {
 	void (*func)(void); wint_t key;
 } funcs[] = {
@@ -483,14 +504,28 @@ static struct {
 	{ open_file, CTRL(L'O') }, { prev_buf, CTRL(L'P') },
 	{ save_to_file_0, CTRL(L'S') }, { goto_top, CTRL(L'T') },
 	{ save_file_as, CTRL(L'W') }, { do_exit, CTRL(L'Q') },
-    { do_cut, CTRL(L'X') },  { do_paste, CTRL(L'V') },
+	{ do_cut, CTRL(L'X') },  { do_paste, CTRL(L'V') },
 	{ center_curline, CTRL(L'Z') }, { handle_backspace, KEY_BACKSPACE },
 	{ handle_del, KEY_DC }, { decr_x, KEY_LEFT },
 	{ incr_x, KEY_RIGHT }, { handle_keydown, KEY_DOWN },
 	{ handle_keyup, KEY_UP }, { handle_tab, L'\t' },
 	{ goto_nextpage, KEY_NPAGE }, { goto_prevpage, KEY_PPAGE },
-	{ find_text, CTRL(L'F') }, { NULL, 0 }
+	{ start_macro, CTRL(L'U') }, { stop_macro, CTRL(L'J') },
+	{ replay_macro, CTRL(L'R') }, { find_text, CTRL(L'F') }, { NULL, 0 }
 };
+
+static void handle_keystroke(wint_t key, int automatic, int rc) {
+	for (unsigned int i=0;funcs[i].func != NULL;++i) {
+		if (key != 0 && funcs[i].key!=0 && funcs[i].key==key) {
+			if (recmac && mlen < MACROMAX) macrobuf[mlen++] = key;
+			funcs[i].func(); key = 0; break;
+		}
+	}
+	if (key >= L' ' && (automatic || rc != KEY_CODE_YES)) {
+		if (recmac && mlen < MACROMAX) macrobuf[mlen++] = key;
+		handle_other_key(key);
+	}
+}
 
 int main(int argc, char * argv[]) {
 	int rc;
@@ -516,15 +551,8 @@ init_empty_buf:
 		CUR = create_line(L"", 0); CUR->prev = NULL; CUR->next = NULL;
 	}
 	while (!quit_loop) {
-		unsigned int i;
 		redraw_screen(); rc  = wget_wch(stdscr, &key); clear_lastline();
-		if (ERR == rc) continue;
-		for (i=0;funcs[i].func != NULL;++i) {
-			if (key != 0 && funcs[i].key!=0 && funcs[i].key==key) {
-				funcs[i].func(); key = 0; break;
-			}
-		}
-		if (key >= L' ' && rc != KEY_CODE_YES) handle_other_key(key);
+		if (ERR == rc) continue; handle_keystroke(key, 0, rc);
 	}
 	noraw(); endwin(); return 0;
 }

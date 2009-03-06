@@ -15,32 +15,36 @@ Keys
 ----
 
 Here's a list of available keys:
-Down            go to next line
-Up              go to previous line
-PageDown        go to next page
-PageUp          go to previous page
-Backspace       delete character left of the cursor
-Return          insert new line
-Ctrl-A          go to begin of line
-Ctrl-B          move current line to bottom of screen
-Ctrl-C          copy text
-Ctrl-D, DEL     delete character right of the cursor
-Ctrl-E          go to end of line
-Ctrl-F          find text
-Ctrl-G          go to line
-Ctrl-K          delete text to end of line
-Ctrl-L          redraw screen
-Ctrl-M, RETURN  insert new line
-Ctrl-N          go to next buffer
-Ctrl-O          open file in new buffer
-Ctrl-P          go to previous buffer
-Ctrl-Q          quit editor
-Ctrl-S          save file
-Ctrl-T          move current line to top of screen
-Ctrl-V          paste text
-Ctrl-W          save file as
-Ctrl-X          cut text
-Ctrl-Z          move current line to center of screen
+Down               go to next line
+Up                 go to previous line
+PageDown           go to next page
+PageUp             go to previous page
+Return             insert new line
+Ctrl-A             go to begin of line
+Ctrl-B             move current line to bottom of screen
+Ctrl-C             copy text
+Ctrl-D, DEL        delete character right of the cursor
+Ctrl-E             go to end of line
+Ctrl-F             find text
+Ctrl-G             go to line
+Ctrl-H, Backspace  delete character left of the cursor
+Ctrl-I, TAB        insert TAB character
+Ctrl-J             stop recording macro
+Ctrl-K             delete text to end of line
+Ctrl-L             redraw screen
+Ctrl-M, RETURN     insert new line
+Ctrl-N             go to next buffer
+Ctrl-O             open file in new buffer
+Ctrl-P             go to previous buffer
+Ctrl-Q             quit editor
+Ctrl-R             replay macro
+Ctrl-S             save file
+Ctrl-T             move current line to top of screen
+Ctrl-U             start recording macro
+Ctrl-V             paste text
+Ctrl-W             save file as
+Ctrl-X             cut text
+Ctrl-Z             move current line to center of screen
 
 
 Contact
