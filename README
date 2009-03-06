@@ -27,6 +27,7 @@ Ctrl-B        move current line to bottom of screen
 Ctrl-C        copy text
 Ctrl-D        delete character right of the cursor
 Ctrl-E        go to end of line
+Ctrl-F        find text
 Ctrl-G        go to line
 Ctrl-K        delete text to end of line
 Ctrl-L        redraw screen

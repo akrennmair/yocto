@@ -399,6 +399,29 @@ static void do_paste(void) {
 	}
 }
 
+static void find_text(void) {
+	unsigned int len; char buf[80]; wchar_t wbuf[80]; PROMPT("Find text:",buf);
+	line_t *pos=CUR; int sr = 0, found = 0; unsigned int oldlx = cb->lx;
+	if ((len=strlen(buf))==0) return; mbstowcs(wbuf,buf,80);
+	while (!sr || (sr && CUR!=pos)) {
+		cb->lx = 0;
+		if (len <= CUR->usize) {
+			for (int i=0;i<=(CUR->usize-len);i++) {
+				if (wmemcmp(wbuf,CUR->text+i,len)==0) {
+					cb->x = cw(CUR->text, (cb->lx = i)); found = 1; goto ends;
+				}
+			}
+		}
+		incr_y();
+		if (!CUR->next) { sr = 1; CUR = find_first(CUR);
+			sr = 1; cb->lx = cb->x = cb->y = cb->offset = 0;
+		} else CUR = CUR->next;
+	}
+ends:
+	if (!found) { cb->x = cw(CUR->text, (cb->lx = oldlx));
+		mvprintw(height-1, 0, "Text not found: %ls", wbuf); }
+}
+
 static void goto_bottom(void) {
 	while (cb->y < height-3 && cb->offset > 0) {
 		incr_y(); cb->offset--;
@@ -466,7 +489,7 @@ static struct {
 	{ incr_x, KEY_RIGHT }, { handle_keydown, KEY_DOWN },
 	{ handle_keyup, KEY_UP }, { handle_tab, L'\t' },
 	{ goto_nextpage, KEY_NPAGE }, { goto_prevpage, KEY_PPAGE },
-	{ NULL, 0 }
+	{ find_text, CTRL(L'F') }, { NULL, 0 }
 };
 
 int main(int argc, char * argv[]) {
