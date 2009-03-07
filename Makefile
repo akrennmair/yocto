@@ -10,6 +10,7 @@ INSTALL=install
 prefix=/usr/local
 bindir=$(prefix)/bin
 man1dir=$(prefix)/share/man/man1
+docdir=$(prefix)/share/doc/$(TARGET)
 
 all: $(TARGET)
 
@@ -23,8 +24,10 @@ clean:
 	$(RM) $(TARGET) $(OBJS)
 
 install: $(TARGET)
-	$(MKDIR) $(DESTDIR)$(bindir) $(DESTDIR)$(man1dir)
+	$(MKDIR) $(DESTDIR)$(bindir) $(DESTDIR)$(man1dir) $(DESTDIR)/$(docdir)
 	$(INSTALL) -m 755 $(TARGET) $(DESTDIR)$(bindir)
 	$(INSTALL) -m 644 doc/$(TARGET).1 $(DESTDIR)$(man1dir)
+	$(INSTALL) -m 644 LICENSE $(DESTDIR)$(docdir)
+	$(INSTALL) -m 644 README $(DESTDIR)$(docdir)
 
 .PHONY: all clean
