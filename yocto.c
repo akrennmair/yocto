@@ -481,7 +481,8 @@ static void show_info(void) {
 	unsigned int curline = cb->y + cb->offset + 1;
 	for (size=i=0;tmp;tmp=tmp->next,i++) { size += tmp->usize + 1; }
 	mvprintw(height-1,0,"\"%s\" %s%u lines %u bytes --%u%%--", 
-	cb->fname,cb->file_modified ? "[Modified] " : "",i,size,(100*curline)/i);
+		cb->fname ? cb->fname : "<no file>", 
+		cb->file_modified ? "[Modified] " : "", i, size, (100*curline)/i);
 }
 
 
