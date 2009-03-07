@@ -444,10 +444,10 @@ static void handle_keydown(void) {
 
 static void handle_tab(void) { insert_char(key); cb->lx++; cb->x+=TABWIDTH; }
 static void handle_other_key(wint_t key) { insert_char(key); incr_x(); }
-static void version(void) { wprintf(L"%s\n", NAME_VERSION); exit(1); }
+static void version(void) { wprintf(L"%s\n", NAME_VERSION); exit(0); }
 
 static void usage(const char * argv0) {
-	wprintf(L"%s: usage: %s [--help|--version|<filename>]\n", argv0, argv0);
+	wprintf(L"%s: usage: %s [-h] [-v] [file]\n", argv0, argv0);
 	exit(1);
 }
 

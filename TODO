@@ -1,9 +1,3 @@
 TODO list:
-- no open items
-
-DONE:
-- correct handling of the tab character
-- documentation
-- implement Ctrl-L
-- open file
-- copy/paste
+- no open items. yocto is a finished project, only bugfixes will enter
+  this project.

@@ -1,0 +1,36 @@
+.Dd Mar 7, 2009
+.Dt YOCTO 1
+.Os "yocto"
+.Sh NAME
+.Nm yocto
+.Nd a minimalistic editor smaller than pico and nano
+.Sh SYNOPSIS
+.Nm yocto
+.Op Fl h
+.Op Fl v
+.Op Ar file
+.Sh DESCRIPTION
+.Nm
+is a minimalistic ncurses-based text editor reasonably easy to use for
+users familiar with text tools. Its most important design goal is to develop an
+editor with as many features as possible (and feasible) while retaining a
+strict limit of a maximum of 500 lines of source code (SLOCs) and reasonably
+readable code.
+.Sh OPTIONS
+.Nm
+accepts the following commandline switches:
+.Bl -tag
+.It Fl h
+Display help
+.It Fl v
+Display version information
+.El
+.Sh SEE ALSO
+.Xr pico 1 ,
+.Xr nano 1 ,
+.Xr vim 1 ,
+.Xr emacs 1 .
+.Sh AUTHORS
+.Bd -literal
+.An Andreas Krennmair <ak@synflood.at>
+.Ed
