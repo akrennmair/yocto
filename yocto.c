@@ -204,11 +204,8 @@ static void handle_goto(void) {
 		unsigned int curpos = cb->y + cb->offset; line_t *l = CUR; int tmp = 0;
 		if (pos < 1){ mvaddwstr(height-1,0,L"Line number too small."); return;}
 		pos--;
-		if (curpos < pos) {
-			while (curpos < pos && l) { l = l->next; curpos++; tmp++; }
-		} else if (curpos > pos) {
-			while (curpos > pos && l) { l = l->prev; curpos--; tmp--; }
-		}
+		while (curpos < pos && l) { l = l->next; curpos++; tmp++; }
+		while (curpos > pos && l) { l = l->prev; curpos--; tmp--; }
 		if (l) {
 			while (tmp > 0) { incr_y(); tmp--; }
 			while (tmp < 0) { decr_y(); tmp++; }
