@@ -1,11 +1,16 @@
 CC=gcc
-CFLAGS=-O2 -Wall -std=c99
+CFLAGS=-O2 -Wall -std=c99 -D_GNU_SOURCE
 LIBS=-lncursesw
 LDFLAGS=
 OBJS=$(patsubst %.c,%.o,$(wildcard *.c))
 TARGET=yocto
 MKDIR=mkdir -p
 INSTALL=install
+
+ifeq ($(shell uname -s),Darwin)
+CFLAGS+=-DITS_OSX
+LIBS=-lncurses
+endif
 
 prefix=/usr/local
 bindir=$(prefix)/bin

@@ -10,8 +10,12 @@ and you think this stuff is worth it, you can buy me a beer in return.
 ------------------------------------------------------------------------------
 */
 
-#define _XOPEN_SOURCE_EXTENDED
-#include <ncurses.h>
+#ifdef ITS_OSX
+#	define _XOPEN_SOURCE_EXTENDED
+#	include <ncurses.h>
+#else
+#	include <ncursesw/ncurses.h>
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
