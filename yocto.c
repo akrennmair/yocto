@@ -476,6 +476,13 @@ static void do_exit(void) {
 	} while (b != cb && quit_loop);
 }
 
+static void show_info(void) {
+	line_t *tmp = find_first(CUR); unsigned int i, size;
+	unsigned int curline = cb->y + cb->offset + 1;
+	for (size=i=0;tmp;tmp=tmp->next,i++) { size += tmp->usize + 1; }
+	mvprintw(height-1,0,"\"%s\" %s%u lines %u bytes --%u%%--", 
+	cb->fname,cb->file_modified ? "[Modified] " : "",i,size,(100*curline)/i);
+}
 
 
 static void start_macro(void) { 
@@ -511,7 +518,8 @@ static struct {
 	{ handle_keyup, KEY_UP }, { handle_tab, L'\t' },
 	{ goto_nextpage, KEY_NPAGE }, { goto_prevpage, KEY_PPAGE },
 	{ start_macro, CTRL(L'U') }, { stop_macro, CTRL(L'J') },
-	{ replay_macro, CTRL(L'R') }, { find_text, CTRL(L'F') }, { NULL, 0 }
+	{ replay_macro, CTRL(L'R') }, { find_text, CTRL(L'F') }, 
+	{ show_info, CTRL(L'Y') }, { NULL, 0 }
 };
 
 static void handle_keystroke(wint_t key, int automatic, int rc) {

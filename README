@@ -44,6 +44,7 @@ Ctrl-U             start recording macro
 Ctrl-V             paste text
 Ctrl-W             save file as
 Ctrl-X             cut text
+Ctrl-Y             display information about current buffer
 Ctrl-Z             move current line to center of screen
 
 
