@@ -35,6 +35,7 @@ and you think this stuff is worth it, you can buy me a beer in return.
 #define CTRL(x) ((x)-L'@')
 #define CUR cb->cur
 static void handle_keystroke(wint_t key, int automatic, int rc);
+static void display_help(void);
 
 typedef struct line {
 	struct line * prev, * next; wchar_t * text; unsigned int asize, usize;
@@ -55,11 +56,8 @@ static line_t * find_first(line_t * l) {
 }
 
 static size_t cw(const wchar_t * text, size_t len) {
-	size_t rv = 0;
-	for (;len > 0;++text,--len) {
-		if (*text == L'\t') rv += TABWIDTH;
-		else rv += wcwidth(*text);
-	}
+	size_t rv = 0; for (;len > 0;++text,--len)
+		if (*text == L'\t') rv += TABWIDTH; else rv += wcwidth(*text);
 	return rv;
 }
 
@@ -69,8 +67,7 @@ static void goto_eol(void) { cb->x = cw(CUR->text, (cb->lx = CUR->usize)); }
 static void align_x(void) {
 	unsigned int i, newx = 0;
 	for (i=0;i<CUR->usize;i++) {
-		if (CUR->text[i] == '\t') newx += TABWIDTH;
-		else newx += wcwidth(CUR->text[i]);
+		if (CUR->text[i] == '\t') newx+=TABWIDTH; else newx+=wcwidth(CUR->text[i]);
 		if (newx > cb->x) break;
 	}
 	cb->x = cw(CUR->text, (cb->lx = i));
@@ -103,40 +100,33 @@ static inline void clear_lastline(void) {
 }
 
 static inline void incr_y(void) {
-	if (cb->y < height-3) cb->y++;
-	else cb->offset++;
+	if (cb->y < height-3) cb->y++; else cb->offset++;
 }
 
 static inline void decr_y(void) {
-	if (cb->y > 0) cb->y--;
-	else cb->offset--;
+	if (cb->y > 0) cb->y--; else cb->offset--;
 }
 
 static inline void incr_x(void) {
 	if (cb->lx < CUR->usize && cb->x < width-1) {
-		if (CUR->text[cb->lx] == L'\t') cb->x += TABWIDTH;
-		else cb->x += wcwidth(CUR->text[cb->lx]);
-		cb->lx++;
+		if (CUR->text[cb->lx] == L'\t') cb->x += TABWIDTH; 
+		else cb->x += wcwidth(CUR->text[cb->lx]); cb->lx++;
 	}
 }
 
 static inline void decr_x(void) {
-	if (cb->lx > 0) {
-		cb->lx--;
+	if (cb->lx > 0) { cb->lx--;
 		if (CUR->text[cb->lx] == L'\t') cb->x -= TABWIDTH;
 		else cb->x -= wcwidth(CUR->text[cb->lx]);
 	}
 }
 
 static void redraw_screen() {
-	int i;
-	line_t * tmp = CUR->prev;
-	attrset(A_REVERSE);
-	mvprintw(height-2, 0, "%*s", width, "");
-	mvprintw(height-2, 0, "[" NAME_VERSION "] %s %s [%u|%u-%u]",
+	int i; line_t * tmp = CUR->prev; attrset(A_REVERSE);
+	mvprintw(height-2,0,"%*s", width, "");
+	mvprintw(height-2,0,"[" NAME_VERSION "] %s %s [%u|%u-%u] Press ESC for help",
 		cb->file_modified ? "*" : "-", cb->fname ? cb->fname : "<no file>",
-		cb->offset + cb->y + 1, cb->lx + 1, cb->x + 1);
-	attrset(A_NORMAL);
+		cb->offset + cb->y + 1, cb->lx + 1, cb->x + 1); attrset(A_NORMAL);
 	if (cb->y > 0) {
 		for (i=cb->y-1;i>=0 && tmp!=NULL;i--,tmp=tmp->prev) {
 			clrline(i); print_line(i, tmp->text, tmp->usize);
@@ -144,8 +134,7 @@ static void redraw_screen() {
 	}
 	tmp = CUR;
 	for (i=cb->y;i<(int)height-2 && tmp!=NULL;i++,tmp=tmp->next) {
-		int attr = A_NORMAL; clrline(i);
-		if (i==(int)cb->y) attr = A_UNDERLINE;
+		int attr = A_NORMAL; clrline(i); if (i==(int)cb->y) attr = A_UNDERLINE;
 		attrset(attr);
 		if (cw(tmp->text, tmp->usize) > width) {
 			print_line(i, tmp->text, tmp->usize);
@@ -163,8 +152,7 @@ static void redraw_screen() {
 
 static void resize_line(line_t * l, size_t size) {
 	if (l->asize < size) {
-		l->text = realloc(l->text, size * sizeof(wchar_t));
-		l->asize = size;
+		l->text = realloc(l->text, size * sizeof(wchar_t)); l->asize = size;
 	}
 	l->usize = size;
 }
@@ -176,10 +164,8 @@ static void insert_char(wint_t key) {
 }
 
 static void handle_enter() {
-	line_t * l;
-	l = create_line(CUR->text + cb->x, CUR->usize - cb->lx);
-	CUR->usize = cb->x;
-	if (CUR->next) CUR->next->prev = l;
+	line_t * l = create_line(CUR->text + cb->x, CUR->usize - cb->lx);
+	CUR->usize = cb->x; if (CUR->next) CUR->next->prev = l;
 	l->next = CUR->next; l->prev = CUR; CUR->next = l; CUR = CUR->next;
 	incr_y(); cb->lx = cb->x = 0; cb->file_modified = 1;
 }
@@ -202,8 +188,7 @@ static void center_curline(void) {
 
 static void handle_goto(void) {
 	char buf[16]; char * ptr; unsigned int pos;
-	PROMPT("Go to line:", buf);
-	pos = strtoul(buf, &ptr, 10);
+	PROMPT("Go to line:", buf); pos = strtoul(buf, &ptr, 10);
 	if (ptr > buf) {
 		unsigned int curpos = cb->y + cb->offset; line_t *l = CUR; int tmp = 0;
 		if (pos < 1){ mvaddwstr(height-1,0,L"Line number too small."); return;}
@@ -211,8 +196,7 @@ static void handle_goto(void) {
 		while (curpos < pos && l) { l = l->next; curpos++; tmp++; }
 		while (curpos > pos && l) { l = l->prev; curpos--; tmp--; }
 		if (l) {
-			while (tmp > 0) { incr_y(); tmp--; }
-			while (tmp < 0) { decr_y(); tmp++; }
+			while (tmp > 0) { incr_y(); tmp--; } while (tmp < 0) { decr_y(); tmp++; }
 			CUR = l; center_curline();
 		} else mvaddwstr(height-1, 0, L"Line number too large.");
 	}
@@ -228,8 +212,7 @@ static void handle_del(void) {
 
 static void handle_backspace(void) {
 	if (cb->x > 0) {
-		decr_x();
-		wmemmove(CUR->text + cb->lx,CUR->text+cb->lx+1,CUR->usize-cb->lx-1);
+		decr_x(); wmemmove(CUR->text+cb->lx,CUR->text+cb->lx+1,CUR->usize-cb->lx-1);
 		CUR->usize--;
 	} else if (CUR->prev) {
 		size_t oldsize; CUR = CUR->prev; oldsize = CUR->usize;
@@ -240,14 +223,12 @@ static void handle_backspace(void) {
 }
 
 static void goto_nextpage(void) {
-	for (unsigned int i=0;i<height-3 && CUR->next!=NULL;i++,CUR=CUR->next) 
-		incr_y();
+	for (unsigned int i=0;i<height-3 && CUR->next;i++,CUR=CUR->next) incr_y();
 	correct_x();
 }
 
 static void goto_prevpage(void) {
-	for (unsigned int i=0;i<height-3 && CUR->prev!=NULL;i++,CUR=CUR->prev)
-		decr_y();
+	for (unsigned int i=0;i<height-3 && CUR->prev;i++,CUR=CUR->prev) decr_y();
 	correct_x();
 }
 
@@ -255,8 +236,7 @@ static void load_file(char * filename) {
 	FILE * f; line_t * l, * first = NULL; wchar_t buf[1024];
 	cb->fname = strdup(filename);
 	if ((f=fopen(cb->fname, "r"))==NULL) {
-		mvprintw(height-1, 0, "New file: %s", cb->fname);
-		CUR = NULL; return;
+		mvprintw(height-1, 0, "New file: %s", cb->fname); CUR = NULL; return;
 	}
 	fwide(f, 1); CUR = NULL;
 	while (!feof(f)) {
@@ -268,13 +248,11 @@ static void load_file(char * filename) {
 			}
 			l = create_line(buf, len);
 			if (CUR) {
-				l->next = CUR->next; l->prev = CUR;
-				CUR->next = l; CUR = CUR->next;
+				l->next = CUR->next; l->prev = CUR; CUR->next = l; CUR = CUR->next;
 			} else { l->prev = l->next = NULL; first = CUR = l; }
 		}
 	}
-	fclose(f);
-	if (CUR) CUR = first;
+	fclose(f); if (CUR) CUR = first;
 }
 
 static wchar_t query(const wchar_t * question, const wchar_t * answers) {
@@ -503,25 +481,43 @@ static void replay_macro(void) {
 }
 
 static struct {
-	void (*func)(void); wint_t key;
+	void (*func)(void); wint_t key; const char *desc;
 } funcs[] = {
-	{ goto_bol, CTRL(L'A') }, { goto_bottom, CTRL(L'B') },
-	{ do_copy, CTRL(L'C') }, { handle_del, CTRL(L'D') },
-	{ goto_eol, CTRL(L'E') }, { handle_goto, CTRL(L'G') },
-	{ kill_to_eol, CTRL(L'K') }, { tabula_rasa, CTRL(L'L') },
-	{ handle_enter, CTRL(L'M') }, { next_buf, CTRL(L'N') },
-	{ open_file, CTRL(L'O') }, { prev_buf, CTRL(L'P') },
-	{ save_to_file_0, CTRL(L'S') }, { goto_top, CTRL(L'T') },
-	{ save_file_as, CTRL(L'W') }, { do_exit, CTRL(L'Q') },
-	{ do_cut, CTRL(L'X') },  { do_paste, CTRL(L'V') },
-	{ center_curline, CTRL(L'Z') }, { handle_backspace, KEY_BACKSPACE },
-	{ handle_del, KEY_DC }, { decr_x, KEY_LEFT },
-	{ incr_x, KEY_RIGHT }, { handle_keydown, KEY_DOWN },
-	{ handle_keyup, KEY_UP }, { handle_tab, L'\t' },
-	{ goto_nextpage, KEY_NPAGE }, { goto_prevpage, KEY_PPAGE },
-	{ start_macro, CTRL(L'U') }, { stop_macro, CTRL(L'J') },
-	{ replay_macro, CTRL(L'R') }, { find_text, CTRL(L'F') }, 
-	{ show_info, CTRL(L'Y') }, { NULL, 0 }
+	{ goto_bol, CTRL(L'A'), "go to begin of line" }, 
+	{ goto_bottom, CTRL(L'B'), "move line to bottom" },
+	{ do_copy, CTRL(L'C'), "copy text" }, 
+	{ handle_del, CTRL(L'D'), "delete character right of cursor" },
+	{ goto_eol, CTRL(L'E'), "go to end of line" }, 
+	{ find_text, CTRL(L'F'), "find text" }, 
+	{ handle_goto, CTRL(L'G'), "go to line" },
+	{ stop_macro, CTRL(L'J'), "stop recording macro" },
+	{ kill_to_eol, CTRL(L'K'), "delete text to end of line" }, 
+	{ tabula_rasa, CTRL(L'L'), "redraw screen" },
+	{ handle_enter, CTRL(L'M'), "insert new line" }, 
+	{ next_buf, CTRL(L'N'), "go to next buffer" },
+	{ open_file, CTRL(L'O'), "open file in new buffer" }, 
+	{ prev_buf, CTRL(L'P'), "go to previous buffer" },
+	{ do_exit, CTRL(L'Q'), "quit editor" },
+	{ replay_macro, CTRL(L'R'), "replay macro" }, 
+	{ save_to_file_0, CTRL(L'S'), "save file" }, 
+	{ goto_top, CTRL(L'T'), "move line to top" },
+	{ start_macro, CTRL(L'U'), "start recording macro" }, 
+	{ do_paste, CTRL(L'V'), "paste text" },
+	{ save_file_as, CTRL(L'W'), "save file as" }, 
+	{ do_cut, CTRL(L'X'), "cut text" },  
+	{ show_info, CTRL(L'Y'), "display info about buffer" }, 
+	{ center_curline, CTRL(L'Z'), "move line to center" },
+	{ handle_backspace, KEY_BACKSPACE, NULL },
+	{ handle_del, KEY_DC, NULL },
+	{ decr_x, KEY_LEFT, NULL },
+	{ incr_x, KEY_RIGHT, NULL },
+	{ handle_keydown, KEY_DOWN, NULL },
+	{ handle_keyup, KEY_UP, NULL },
+	{ handle_tab, L'\t', NULL },
+	{ goto_nextpage, KEY_NPAGE, NULL },
+	{ goto_prevpage, KEY_PPAGE, NULL },
+	{ display_help, L'\033', NULL },
+	{ NULL, 0, NULL }
 };
 
 static void handle_keystroke(wint_t key, int automatic, int rc) {
@@ -535,6 +531,16 @@ static void handle_keystroke(wint_t key, int automatic, int rc) {
 		if (recmac && mlen < MACROMAX) macrobuf[mlen++] = key;
 		handle_other_key(key);
 	}
+}
+
+static void display_help(void) {
+	unsigned int i=0; attrset(A_REVERSE); mvprintw(0, 0, "%*s", width, "");
+	mvprintw(0,0,"[" NAME_VERSION "] Help");mvprintw(height-2, 0,"%*s",width,"");
+	mvprintw(height-2, 0, "Press any key to return to editor"); attrset(A_NORMAL);
+	for (;funcs[i].desc;++i) 
+		mvprintw((i+2)/2,i&1?39:0,"Ctrl-%lc  %s",L'@'+funcs[i].key, funcs[i].desc);
+	for (i=i/2+1;i<height-2;i++) clrline(i);
+	refresh(); wint_t key; wget_wch(stdscr, &key);
 }
 
 int main(int argc, char * argv[]) {
