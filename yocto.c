@@ -291,7 +291,7 @@ read_filename:
 		fputwc(L'\n', f);
 		size += l->usize + 1;
 	}
-	fclose(f); mvprintw(height-1, 0, "Wrote '%s' (%u bytes).", cb->fname, size);
+	fclose(f); mvprintw(height-1, 0, "Wrote '%s' (%u characters).", cb->fname, size);
 	cb->file_modified = 0;
 }
 
@@ -459,7 +459,7 @@ static void show_info(void) {
 	line_t *tmp = find_first(CUR); unsigned int i, size;
 	unsigned int curline = cb->y + cb->offset + 1;
 	for (size=i=0;tmp;tmp=tmp->next,i++) { size += tmp->usize + 1; }
-	mvprintw(height-1,0,"\"%s\" %s%u lines %u bytes --%u%%--", 
+	mvprintw(height-1,0,"\"%s\" %s%u lines %u characters --%u%%--", 
 		cb->fname ? cb->fname : "<no file>", 
 		cb->file_modified ? "[Modified] " : "", i, size, (100*curline)/i);
 }
