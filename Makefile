@@ -25,7 +25,7 @@ $(TARGET): $(OBJS)
 %.o: %.c
 	$(CC) $(CFLAGS) -o $@ -c $<
 
-clean:
+distclean clean:
 	$(RM) $(TARGET) $(OBJS)
 
 install: $(TARGET)
