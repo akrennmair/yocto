@@ -34,6 +34,12 @@ and you think this stuff is worth it, you can buy me a beer in return.
 	clear_lastline(); } while(0)
 #define CTRL(x) ((x)-L'@')
 #define CUR cb->cur
+#define CREATE_NEWBUF buf_t * newbuf = calloc(1, sizeof(buf_t)); \
+	if (cb) { newbuf->next = cb->next; newbuf->prev = cb; \
+	newbuf->next->prev = newbuf; newbuf->prev->next = newbuf; \
+	cb = newbuf; } else { cb = newbuf->next = newbuf->prev = newbuf; }
+#define INIT_CUR CUR = create_line(L"", 0); CUR->prev = NULL; CUR->next = NULL;
+
 static void handle_keystroke(wint_t key, int automatic, int rc);
 static void display_help(void);
 
@@ -236,7 +242,7 @@ static void load_file(char * filename) {
 	FILE * f; line_t * l, * first = NULL; wchar_t buf[1024];
 	cb->fname = strdup(filename);
 	if ((f=fopen(cb->fname, "r"))==NULL) {
-		mvprintw(height-1, 0, "New file: %s", cb->fname); CUR = NULL; return;
+		mvprintw(height-1, 0, "New file: %s", cb->fname); INIT_CUR; return;
 	}
 	fwide(f, 1); CUR = NULL;
 	while (!feof(f)) {
@@ -309,13 +315,8 @@ static void free_list(line_t * l) {
 }
 
 static void open_file(void) {
-	buf_t * newbuf = calloc(1, sizeof(buf_t));
 	char buf[256];
-	newbuf->next = cb->next; newbuf->prev = cb;
-	newbuf->next->prev = newbuf; newbuf->prev->next = newbuf;
-	cb = cb->next;
-	PROMPT("Open file:", buf);
-	load_file(buf);
+	CREATE_NEWBUF PROMPT("Open file:", buf); load_file(buf);
 	if (!CUR) {
 		mvprintw(height-1, 0, "Error: couldn't open '%s'.", buf);
 		cb = newbuf->prev; newbuf->prev->next = newbuf->next;
@@ -556,15 +557,12 @@ int main(int argc, char * argv[]) {
 	}
 
 	initscr(); raw(); noecho(); nonl(); keypad(stdscr, TRUE);
-	cb = calloc(1, sizeof(buf_t)); cb->next = cb->prev = cb;
 	getmaxyx(stdscr, height, width);
 
 	if (argc > 1) {
-		load_file(argv[1]);
-		if (CUR == NULL) goto init_empty_buf;
+		for (int i=1;i<argc;i++) { CREATE_NEWBUF load_file(argv[i]); }
 	} else {
-init_empty_buf:
-		CUR = create_line(L"", 0); CUR->prev = NULL; CUR->next = NULL;
+		CREATE_NEWBUF INIT_CUR
 	}
 	while (!quit_loop) {
 		redraw_screen(); rc  = wget_wch(stdscr, &key); clear_lastline();
