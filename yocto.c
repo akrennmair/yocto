@@ -24,7 +24,7 @@ and you think this stuff is worth it, you can buy me a beer in return.
 #include <sys/stat.h>
 #include <locale.h>
 
-#define NAME_VERSION "yocto 0.1"
+#define NAME_VERSION "yocto 0.3"
 #define TABWIDTH 8
 #define MACROMAX 1024
 
