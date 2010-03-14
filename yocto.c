@@ -397,8 +397,8 @@ static void find_text(void) {
 			}
 		}
 		incr_y();
-		if (!CUR->next) { sr = 1; CUR = find_first(CUR);
-			sr = 1; cb->lx = cb->x = cb->y = cb->offset = 0;
+		if (!CUR->next) { CUR = find_first(CUR); sr = 1; 
+			cb->lx = cb->x = cb->y = cb->offset = 0;
 		} else CUR = CUR->next;
 	}
 ends:
@@ -462,7 +462,7 @@ static void show_info(void) {
 	for (size=i=0;tmp;tmp=tmp->next,i++) { size += tmp->usize + 1; }
 	mvprintw(height-1,0,"\"%s\" %s%u lines %u characters --%u%%--", 
 		cb->fname ? cb->fname : "<no file>", 
-		cb->file_modified ? "[Modified] " : "", i, size, (100*curline)/i);
+		cb->file_modified ? "[Modified] " : "", i, size, i?(100*curline)/i:0);
 }
 
 
