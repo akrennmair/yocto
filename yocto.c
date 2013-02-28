@@ -19,7 +19,6 @@ and you think this stuff is worth it, you can buy me a beer in return.
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <wchar.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <locale.h>
@@ -32,19 +31,19 @@ and you think this stuff is worth it, you can buy me a beer in return.
 #define PROMPT(pr,buf) do { mvprintw(height-1, 0, (pr)); echo(); \
 	mvgetnstr(height-1, sizeof(pr), buf, sizeof(buf)); noecho(); \
 	clear_lastline(); } while(0)
-#define CTRL(x) ((x)-L'@')
+#define CTRL(x) ((x)-'@')
 #define CUR cb->cur
 #define CREATE_NEWBUF buf_t * newbuf = calloc(1, sizeof(buf_t)); \
 	if (cb) { newbuf->next = cb->next; newbuf->prev = cb; \
 	newbuf->next->prev = newbuf; newbuf->prev->next = newbuf; \
 	cb = newbuf; } else { cb = newbuf->next = newbuf->prev = newbuf; }
-#define INIT_CUR CUR = create_line(L"", 0); CUR->prev = NULL; CUR->next = NULL;
+#define INIT_CUR CUR = create_line("", 0); CUR->prev = NULL; CUR->next = NULL;
 
-static void handle_keystroke(wint_t key, int automatic, int rc);
+static void handle_keystroke(int key, int automatic);
 static void display_help(void);
 
 typedef struct line {
-	struct line * prev, * next; wchar_t * text; unsigned int asize, usize;
+	struct line * prev, * next; char * text; unsigned int asize, usize;
 } line_t;
 
 typedef struct buf {
@@ -53,17 +52,17 @@ typedef struct buf {
 } buf_t;
 
 static unsigned int width, height, quit_loop=0;
-static wint_t key; static buf_t * cb = NULL; line_t * pastebuf = NULL;
-static wint_t macrobuf[MACROMAX];
+static int key; static buf_t * cb = NULL; line_t * pastebuf = NULL;
+static int macrobuf[MACROMAX];
 static unsigned int mlen = 0, recmac = 0;
 
 static line_t * find_first(line_t * l) {
 	while (l->prev != NULL) l = l->prev; return l;
 }
 
-static size_t cw(const wchar_t * text, size_t len) {
+static size_t cw(const char * text, size_t len) {
 	size_t rv = 0; for (;len > 0;++text,--len)
-		if (*text == L'\t') rv += TABWIDTH; else rv += wcwidth(*text);
+		if (*text == '\t') rv += TABWIDTH; else rv++;
 	return rv;
 }
 
@@ -73,7 +72,7 @@ static void goto_eol(void) { cb->x = cw(CUR->text, (cb->lx = CUR->usize)); }
 static void align_x(void) {
 	unsigned int i, newx = 0;
 	for (i=0;i<CUR->usize;i++) {
-		if (CUR->text[i] == '\t') newx+=TABWIDTH; else newx+=wcwidth(CUR->text[i]);
+		if (CUR->text[i] == '\t') newx+=TABWIDTH; else newx++;
 		if (newx > cb->x) break;
 	}
 	cb->x = cw(CUR->text, (cb->lx = i));
@@ -84,20 +83,20 @@ static void correct_x(void) {
 	else align_x();
 }
 
-static size_t print_line(unsigned int yc, const wchar_t * text, size_t len) {
+static size_t print_line(unsigned int yc, const char * text, size_t len) {
 	size_t col = 0;
 	for (unsigned int i=0;i<len && col<width;i++) {
 		if (text[i] == '\t') {
 			mvprintw(yc, col, "%*s", TABWIDTH, ""); col += TABWIDTH;
-		} else { mvaddnwstr(yc, col, text + i, 1); col += wcwidth(text[i]); }
+		} else { mvaddnstr(yc, col, text + i, 1); col++; }
 	}
 	return col;
 }
 
-static line_t * create_line(const wchar_t * text, unsigned int textlen) {
+static line_t * create_line(const char * text, unsigned int textlen) {
 	line_t * l = malloc(sizeof(line_t)); unsigned int len = text ? textlen : 0;
-	l->text = malloc(len * sizeof(wchar_t));
-	if (text) wmemcpy(l->text, text, len); l->usize = l->asize = len;
+	l->text = malloc(len);
+	if (text) memcpy(l->text, text, len); l->usize = l->asize = len;
 	return l;
 }
 
@@ -115,15 +114,15 @@ static inline void decr_y(void) {
 
 static inline void incr_x(void) {
 	if (cb->lx < CUR->usize && cb->x < width-1) {
-		if (CUR->text[cb->lx] == L'\t') cb->x += TABWIDTH; 
-		else cb->x += wcwidth(CUR->text[cb->lx]); cb->lx++;
+		if (CUR->text[cb->lx] == '\t') cb->x += TABWIDTH; 
+		else cb->x++;
 	}
 }
 
 static inline void decr_x(void) {
 	if (cb->lx > 0) { cb->lx--;
-		if (CUR->text[cb->lx] == L'\t') cb->x -= TABWIDTH;
-		else cb->x -= wcwidth(CUR->text[cb->lx]);
+		if (CUR->text[cb->lx] == '\t') cb->x -= TABWIDTH;
+		else cb->x--;
 	}
 }
 
@@ -144,7 +143,7 @@ static void redraw_screen() {
 		attrset(attr);
 		if (cw(tmp->text, tmp->usize) > width) {
 			print_line(i, tmp->text, tmp->usize);
-			attrset(attr | A_BOLD); mvaddwstr(i, width-1, L"$"); attrset(attr);
+			attrset(attr | A_BOLD); mvaddstr(i, width-1, "$"); attrset(attr);
 		} else {
 			size_t col = print_line(i, tmp->text, tmp->usize);
 			mvprintw(i,col,"%*s", width-col, "");
@@ -152,21 +151,21 @@ static void redraw_screen() {
 		attrset(A_NORMAL);
 	}
 	attrset(A_BOLD);
-	for (;i<(int)height-2;i++) { clrline(i); mvaddwstr(i, 0, L"~"); }
+	for (;i<(int)height-2;i++) { clrline(i); mvaddstr(i, 0, "~"); }
 	attrset(A_NORMAL); move(cb->y, cb->x); refresh();
 }
 
 static void resize_line(line_t * l, size_t size) {
 	if (l->asize < size) {
-		l->text = realloc(l->text, size * sizeof(wchar_t)); l->asize = size;
+		l->text = realloc(l->text, size); l->asize = size;
 	}
 	l->usize = size;
 }
 
-static void insert_char(wint_t key) {
+static void insert_char(int key) {
 	resize_line(CUR, CUR->usize + 1);
-	wmemmove(CUR->text+cb->lx+1, CUR->text+cb->lx, CUR->usize-cb->lx-1);
-	CUR->text[cb->lx] = (wchar_t)key; cb->file_modified = 1;
+	memmove(CUR->text+cb->lx+1, CUR->text+cb->lx, CUR->usize-cb->lx-1);
+	CUR->text[cb->lx] = (char)key; cb->file_modified = 1;
 }
 
 static void handle_enter() {
@@ -180,7 +179,7 @@ static void merge_next_line(void) {
 	if (CUR->next) {
 		line_t * n = CUR->next; size_t oldsize = CUR->usize;
 		resize_line(CUR, CUR->usize + n->usize);
-		wmemmove(CUR->text + oldsize, n->text, n->usize);
+		memmove(CUR->text + oldsize, n->text, n->usize);
 		if (n->next) n->next->prev = CUR;
 		CUR->next = n->next; free(n->text); free(n);
 	}
@@ -197,20 +196,20 @@ static void handle_goto(void) {
 	PROMPT("Go to line:", buf); pos = strtoul(buf, &ptr, 10);
 	if (ptr > buf) {
 		unsigned int curpos = cb->y + cb->offset; line_t *l = CUR; int tmp = 0;
-		if (pos < 1){ mvaddwstr(height-1,0,L"Line number too small."); return;}
+		if (pos < 1){ mvaddstr(height-1,0,"Line number too small."); return;}
 		pos--;
 		while (curpos < pos && l) { l = l->next; curpos++; tmp++; }
 		while (curpos > pos && l) { l = l->prev; curpos--; tmp--; }
 		if (l) {
 			while (tmp > 0) { incr_y(); tmp--; } while (tmp < 0) { decr_y(); tmp++; }
 			CUR = l; center_curline();
-		} else mvaddwstr(height-1, 0, L"Line number too large.");
+		} else mvaddstr(height-1, 0, "Line number too large.");
 	}
 }
 
 static void handle_del(void) {
 	if (cb->lx < CUR->usize) {
-		wmemmove(CUR->text + cb->lx,CUR->text + cb->lx+1,CUR->usize-cb->lx-1);
+		memmove(CUR->text + cb->lx,CUR->text + cb->lx+1,CUR->usize-cb->lx-1);
 		CUR->usize--;
 	} else merge_next_line();
 	cb->file_modified = 1;
@@ -218,7 +217,7 @@ static void handle_del(void) {
 
 static void handle_backspace(void) {
 	if (cb->x > 0) {
-		decr_x(); wmemmove(CUR->text+cb->lx,CUR->text+cb->lx+1,CUR->usize-cb->lx-1);
+		decr_x(); memmove(CUR->text+cb->lx,CUR->text+cb->lx+1,CUR->usize-cb->lx-1);
 		CUR->usize--;
 	} else if (CUR->prev) {
 		size_t oldsize; CUR = CUR->prev; oldsize = CUR->usize;
@@ -239,18 +238,18 @@ static void goto_prevpage(void) {
 }
 
 static void load_file(char * filename) {
-	FILE * f; line_t * l, * first = NULL; wchar_t buf[1024];
+	FILE * f; line_t * l, * first = NULL; char buf[1024];
 	cb->fname = strdup(filename);
 	if ((f=fopen(cb->fname, "r"))==NULL) {
 		mvprintw(height-1, 0, "New file: %s", cb->fname); INIT_CUR; return;
 	}
 	fwide(f, 1); CUR = NULL;
 	while (!feof(f)) {
-		fgetws(buf, sizeof(buf)/sizeof(*buf), f);
+		fgets(buf, sizeof(buf), f);
 		if (!feof(f)) {
-			size_t len = wcslen(buf);
-			if (len>0 && buf[len-1] == L'\n') {
-				buf[len-1] = L'\0'; len--;
+			size_t len = strlen(buf);
+			if (len>0 && buf[len-1] == '\n') {
+				buf[len-1] = '\0'; len--;
 			}
 			l = create_line(buf, len);
 			if (CUR) {
@@ -261,11 +260,11 @@ static void load_file(char * filename) {
 	fclose(f); if (CUR) CUR = first;
 }
 
-static wchar_t query(const wchar_t * question, const wchar_t * answers) {
-	wint_t a; int rc; clear_lastline(); mvaddwstr(height-1, 0, question);
-	move(height-1, wcswidth(question, wcslen(question))+1);
-	do { rc = wget_wch(stdscr, &a);
-	} while (rc == ERR || wcschr(answers, a)==NULL);
+static char query(const char * question, const char * answers) {
+	int a; clear_lastline(); mvaddstr(height-1, 0, question);
+	move(height-1, strlen(question)+1);
+	do { a = getch();
+	} while (a == ERR || strchr(answers, a)==NULL);
 	clear_lastline();
 	return a;
 }
@@ -280,21 +279,20 @@ read_filename:
 			if (warn_if_exists) {
 				struct stat st;
 				if (stat(buf, &st)==0 && 
-				query(L"File exists. Overwrite (y/n)?", L"yn")==L'n')
+				query("File exists. Overwrite (y/n)?", "yn")=='n')
 						goto read_filename;
 			}
 			cb->fname = strdup(buf);
-		} else { mvaddwstr(height-1, 0, L"Aborted saving."); return; }
+		} else { mvaddstr(height-1, 0, "Aborted saving."); return; }
 	}
 	if ((f=fopen(cb->fname, "w"))==NULL) {
 		mvprintw(height-1, 0, "Error: couldn't open '%s' for writing.", cb->fname);
 		return;
 	}
-	fwide(f, 1);
 	for (line_t * l = find_first(CUR);l!=NULL;l=l->next) {
 		unsigned int i;
-		for (i=0;i<l->usize;i++) fputwc(l->text[i], f);
-		fputwc(L'\n', f);
+		for (i=0;i<l->usize;i++) fputc(l->text[i], f);
+		fputc('\n', f);
 		size += l->usize + 1;
 	}
 	fclose(f); mvprintw(height-1, 0, "Wrote '%s' (%u characters).", cb->fname, size);
@@ -363,7 +361,7 @@ static void do_cut(void) {
 			else CUR = tmp->next;
 		} else	if (CUR->prev) { CUR->prev->next = NULL; CUR = CUR->prev; }
 				else CUR = NULL;
-		if (!CUR) CUR = create_line(L"", 0); if (tmp) tmp->next = NULL;
+		if (!CUR) CUR = create_line("", 0); if (tmp) tmp->next = NULL;
 		decr_y(); mvprintw(height-1, 0, "Cut %u lines.", i);
 		cb->file_modified = 1;
 	}
@@ -384,14 +382,14 @@ static void do_paste(void) {
 }
 
 static void find_text(void) {
-	unsigned int len; char buf[80]; wchar_t wbuf[80]; PROMPT("Find text:",buf);
+	unsigned int len; char buf[80]; PROMPT("Find text:",buf);
 	line_t *pos=CUR; int sr = 0, found = 0; unsigned int oldlx = cb->lx;
-	if ((len=strlen(buf))==0) return; mbstowcs(wbuf,buf,80);
+	if ((len=strlen(buf))==0) return;
 	while (!sr || (sr && CUR!=pos)) {
 		cb->lx = 0;
 		if (len <= CUR->usize) {
 			for (int i=0;i<=(CUR->usize-len);i++) {
-				if (wmemcmp(wbuf,CUR->text+i,len)==0) {
+				if (memcmp(buf,CUR->text+i,len)==0) {
 					cb->x = cw(CUR->text, (cb->lx = i)); found = 1; goto ends;
 				}
 			}
@@ -403,7 +401,7 @@ static void find_text(void) {
 	}
 ends:
 	if (!found) { cb->x = cw(CUR->text, (cb->lx = oldlx));
-		mvprintw(height-1, 0, "Text not found: %ls", wbuf); }
+		mvprintw(height-1, 0, "Text not found: %s", buf); }
 }
 
 static void goto_bottom(void) {
@@ -423,11 +421,11 @@ static void handle_keydown(void) {
 }
 
 static void handle_tab(void) { insert_char(key); cb->lx++; cb->x+=TABWIDTH; }
-static void handle_other_key(wint_t key) { insert_char(key); incr_x(); }
-static void version(void) { wprintf(L"%s\n", NAME_VERSION); exit(0); }
+static void handle_other_key(int key) { insert_char(key); incr_x(); }
+static void version(void) { printf("%s\n", NAME_VERSION); exit(0); }
 
 static void usage(const char * argv0) {
-	wprintf(L"%s: usage: %s [-h] [-v] [file]\n", argv0, argv0);
+	printf("%s: usage: %s [-h] [-v] [file]\n", argv0, argv0);
 	exit(1);
 }
 
@@ -446,10 +444,10 @@ static void do_exit(void) {
 	do {
 		if (cb->file_modified) {
 			redraw_screen();
-			switch (query(L"Save file (y/n/c)?", L"ync")) {
-			case L'y': save_to_file(cb->fname==NULL);
-			case L'n': break;
-			case L'c': quit_loop = 0; break;
+			switch (query("Save file (y/n/c)?", "ync")) {
+			case 'y': save_to_file(cb->fname==NULL);
+			case 'n': break;
+			case 'c': quit_loop = 0; break;
 			}
 		}
 		if (quit_loop) next_buf();
@@ -467,68 +465,68 @@ static void show_info(void) {
 
 
 static void start_macro(void) { 
-	mvaddwstr(height-1, 0, L"Started recording"); mlen = 0; recmac = 1; }
+	mvaddstr(height-1, 0, "Started recording"); mlen = 0; recmac = 1; }
 
 static void stop_macro(void) { 
-	mvaddwstr(height-1, 0, L"Stopped recording"); recmac = 0; mlen--; }
+	mvaddstr(height-1, 0, "Stopped recording"); recmac = 0; mlen--; }
 
 static void replay_macro(void) {
 	if (!recmac) {
 		for (unsigned int i=0;i<mlen;i++) {
-			handle_keystroke(macrobuf[i], 1, 0);
+			handle_keystroke(macrobuf[i], 1);
 		}
-		mvaddwstr(height-1, 0, L"Replayed macro");
-	} else mvaddwstr(height-1, 0, L"Can't replay macro while recording one.");
+		mvaddstr(height-1, 0, "Replayed macro");
+	} else mvaddstr(height-1, 0, "Can't replay macro while recording one.");
 }
 
 static struct {
-	void (*func)(void); wint_t key; const char *desc;
+	void (*func)(void); int key; const char *desc;
 } funcs[] = {
-	{ goto_bol, CTRL(L'A'), "go to begin of line" }, 
-	{ goto_bottom, CTRL(L'B'), "move line to bottom" },
-	{ do_copy, CTRL(L'C'), "copy text" }, 
-	{ handle_del, CTRL(L'D'), "delete character right of cursor" },
-	{ goto_eol, CTRL(L'E'), "go to end of line" }, 
-	{ find_text, CTRL(L'F'), "find text" }, 
-	{ handle_goto, CTRL(L'G'), "go to line" },
-	{ stop_macro, CTRL(L'J'), "stop recording macro" },
-	{ kill_to_eol, CTRL(L'K'), "delete text to end of line" }, 
-	{ tabula_rasa, CTRL(L'L'), "redraw screen" },
-	{ handle_enter, CTRL(L'M'), "insert new line" }, 
-	{ next_buf, CTRL(L'N'), "go to next buffer" },
-	{ open_file, CTRL(L'O'), "open file in new buffer" }, 
-	{ prev_buf, CTRL(L'P'), "go to previous buffer" },
-	{ do_exit, CTRL(L'Q'), "quit editor" },
-	{ replay_macro, CTRL(L'R'), "replay macro" }, 
-	{ save_to_file_0, CTRL(L'S'), "save file" }, 
-	{ goto_top, CTRL(L'T'), "move line to top" },
-	{ start_macro, CTRL(L'U'), "start recording macro" }, 
-	{ do_paste, CTRL(L'V'), "paste text" },
-	{ save_file_as, CTRL(L'W'), "save file as" }, 
-	{ do_cut, CTRL(L'X'), "cut text" },  
-	{ show_info, CTRL(L'Y'), "display info about buffer" }, 
-	{ center_curline, CTRL(L'Z'), "move line to center" },
+	{ goto_bol, CTRL('A'), "go to begin of line" }, 
+	{ goto_bottom, CTRL('B'), "move line to bottom" },
+	{ do_copy, CTRL('C'), "copy text" }, 
+	{ handle_del, CTRL('D'), "delete character right of cursor" },
+	{ goto_eol, CTRL('E'), "go to end of line" }, 
+	{ find_text, CTRL('F'), "find text" }, 
+	{ handle_goto, CTRL('G'), "go to line" },
+	{ stop_macro, CTRL('J'), "stop recording macro" },
+	{ kill_to_eol, CTRL('K'), "delete text to end of line" }, 
+	{ tabula_rasa, CTRL('L'), "redraw screen" },
+	{ handle_enter, CTRL('M'), "insert new line" }, 
+	{ next_buf, CTRL('N'), "go to next buffer" },
+	{ open_file, CTRL('O'), "open file in new buffer" }, 
+	{ prev_buf, CTRL('P'), "go to previous buffer" },
+	{ do_exit, CTRL('Q'), "quit editor" },
+	{ replay_macro, CTRL('R'), "replay macro" }, 
+	{ save_to_file_0, CTRL('S'), "save file" }, 
+	{ goto_top, CTRL('T'), "move line to top" },
+	{ start_macro, CTRL('U'), "start recording macro" }, 
+	{ do_paste, CTRL('V'), "paste text" },
+	{ save_file_as, CTRL('W'), "save file as" }, 
+	{ do_cut, CTRL('X'), "cut text" },  
+	{ show_info, CTRL('Y'), "display info about buffer" }, 
+	{ center_curline, CTRL('Z'), "move line to center" },
 	{ handle_backspace, KEY_BACKSPACE, NULL },
 	{ handle_del, KEY_DC, NULL },
 	{ decr_x, KEY_LEFT, NULL },
 	{ incr_x, KEY_RIGHT, NULL },
 	{ handle_keydown, KEY_DOWN, NULL },
 	{ handle_keyup, KEY_UP, NULL },
-	{ handle_tab, L'\t', NULL },
+	{ handle_tab, '\t', NULL },
 	{ goto_nextpage, KEY_NPAGE, NULL },
 	{ goto_prevpage, KEY_PPAGE, NULL },
-	{ display_help, L'\033', NULL },
+	{ display_help, '\033', NULL },
 	{ NULL, 0, NULL }
 };
 
-static void handle_keystroke(wint_t key, int automatic, int rc) {
+static void handle_keystroke(int key, int automatic) {
 	for (unsigned int i=0;funcs[i].func != NULL;++i) {
 		if (key != 0 && funcs[i].key!=0 && funcs[i].key==key) {
 			if (recmac && mlen < MACROMAX) macrobuf[mlen++] = key;
 			funcs[i].func(); key = 0; break;
 		}
 	}
-	if (key >= L' ' && (automatic || rc != KEY_CODE_YES)) {
+	if (key >= ' ') {
 		if (recmac && mlen < MACROMAX) macrobuf[mlen++] = key;
 		handle_other_key(key);
 	}
@@ -539,16 +537,12 @@ static void display_help(void) {
 	mvprintw(0,0,"[" NAME_VERSION "] Help");mvprintw(height-2, 0,"%*s",width,"");
 	mvprintw(height-2, 0, "Press any key to return to editor"); attrset(A_NORMAL);
 	for (;funcs[i].desc;++i) 
-		mvprintw((i+2)/2,i&1?39:0,"Ctrl-%lc  %s",L'@'+funcs[i].key, funcs[i].desc);
+		mvprintw((i+2)/2,i&1?39:0,"Ctrl-%c  %s",'@'+funcs[i].key, funcs[i].desc);
 	for (i=i/2+1;i<height-2;i++) clrline(i);
-	refresh(); wint_t key; wget_wch(stdscr, &key);
+	refresh(); getch();
 }
 
 int main(int argc, char * argv[]) {
-	int rc;
-
-	if (!setlocale(LC_ALL,"")) fprintf(stderr, "Warning: can't set locale!\n");
-
 	if (argc > 1) {
 		if (strcmp(argv[1], "-v")==0 || strcmp(argv[1], "--version")==0)
 			version();
@@ -565,8 +559,8 @@ int main(int argc, char * argv[]) {
 		CREATE_NEWBUF INIT_CUR
 	}
 	while (!quit_loop) {
-		redraw_screen(); rc  = wget_wch(stdscr, &key); clear_lastline();
-		if (ERR == rc) continue; handle_keystroke(key, 0, rc);
+		redraw_screen(); key = getch(); clear_lastline();
+		if (ERR == key) continue; handle_keystroke(key, 0);
 	}
 	noraw(); endwin(); return 0;
 }
